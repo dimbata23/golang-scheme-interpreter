@@ -1,3 +1,6 @@
+// A very simple lexer inspired by Lexical Scanning in Go, a talk by Rob Pike
+// at Google Technology User Group given on Tuesday, 30 August 2011.
+
 package lexer
 
 import (
