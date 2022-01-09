@@ -67,26 +67,19 @@ func (i Token) String() string {
 // Lexer struct
 
 type Lexer struct {
-	input string     // text being lexed
-	start int        // starting position of current item
-	pos   int        // current position in the text
-	width int        // width of last read rune
-	state stateFn    // the state function used for lexing
-	level int        // number of lists opened and not closed
-	items chan Token // output channel of read items
+	input  string     // text being lexed
+	start  int        // starting position of current token
+	pos    int        // current position in the text
+	width  int        // width of last read rune
+	state  stateFn    // the state function used for lexing
+	level  int        // number of lists opened and not closed
+	tokens chan Token // output channel of read token
 }
 
 type stateFn func(*Lexer) stateFn
 
-// func (l *lexer) run() {
-// 	for state := lexText; state != nil; {
-// 		state = state(l)
-// 	}
-// 	close(l.items)
-// }
-
 func (l *Lexer) emit(t TokenType) {
-	l.items <- Token{t, l.input[l.start:l.pos]}
+	l.tokens <- Token{t, l.input[l.start:l.pos]}
 	l.start = l.pos
 }
 
@@ -117,7 +110,7 @@ func (l *Lexer) peek() rune {
 }
 
 func (l *Lexer) errorf(format string, args ...interface{}) stateFn {
-	l.items <- Token{TokenError, fmt.Sprintf(format, args...)}
+	l.tokens <- Token{TokenError, fmt.Sprintf(format, args...)}
 	return nil
 }
 
@@ -143,23 +136,23 @@ func (l *Lexer) acceptRun(valid string) int {
 
 func Lex(input string) *Lexer {
 	l := &Lexer{
-		input: input,
-		state: lexText,
-		items: make(chan Token, 2),
+		input:  input,
+		state:  lexText,
+		tokens: make(chan Token, 2),
 	}
 
 	return l
 }
 
-func (l *Lexer) NextItem() *Token {
+func (l *Lexer) NextToken() *Token {
 	for {
 		select {
-		case item := <-l.items:
-			if item.Typ == TokenEOF {
+		case token := <-l.tokens:
+			if token.Typ == TokenEOF {
 				return nil
 			}
 
-			return &item
+			return &token
 		default:
 			l.state = l.state(l)
 		}

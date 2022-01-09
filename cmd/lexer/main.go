@@ -13,12 +13,12 @@ func main() {
 		l := lexer.Lex(string(str))
 		fmt.Println("Lexing...")
 		for {
-			item := l.NextItem()
-			if item == nil {
+			token := l.NextToken()
+			if token == nil {
 				break
 			}
 
-			fmt.Println(item)
+			fmt.Println(token)
 		}
 		fmt.Println("Done.")
 	} else {
