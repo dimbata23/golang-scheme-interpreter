@@ -10,6 +10,7 @@ func main() {
 	i := interpreter.MakeInterpreter()
 	for {
 		var input string
+		fmt.Print(">")
 		_, err := fmt.Scanln(&input)
 		if err != nil {
 			fmt.Println(err)
