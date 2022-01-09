@@ -11,7 +11,7 @@ func main() {
 	str, err := ioutil.ReadFile("test/testfile.scm")
 	if err == nil {
 		l := lexer.Lex(string(str))
-		fmt.Println("Parsing...")
+		fmt.Println("Lexing...")
 		for {
 			item := l.NextItem()
 			if item == nil {

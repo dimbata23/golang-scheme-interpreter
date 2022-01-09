@@ -66,7 +66,7 @@ func (i Item) String() string {
 
 // Lexer struct
 
-type lexer struct {
+type Lexer struct {
 	input string    // text being lexed
 	start int       // starting position of current item
 	pos   int       // current position in the text
@@ -76,7 +76,7 @@ type lexer struct {
 	items chan Item // output channel of read items
 }
 
-type stateFn func(*lexer) stateFn
+type stateFn func(*Lexer) stateFn
 
 // func (l *lexer) run() {
 // 	for state := lexText; state != nil; {
@@ -85,12 +85,12 @@ type stateFn func(*lexer) stateFn
 // 	close(l.items)
 // }
 
-func (l *lexer) emit(t itemType) {
+func (l *Lexer) emit(t itemType) {
 	l.items <- Item{t, l.input[l.start:l.pos]}
 	l.start = l.pos
 }
 
-func (l *lexer) next() (r rune) {
+func (l *Lexer) next() (r rune) {
 	if l.pos >= len(l.input) {
 		l.width = 0
 		return eof
@@ -102,27 +102,27 @@ func (l *lexer) next() (r rune) {
 	return r
 }
 
-func (l *lexer) ignore() {
+func (l *Lexer) ignore() {
 	l.start = l.pos
 }
 
-func (l *lexer) backup() {
+func (l *Lexer) backup() {
 	l.pos -= l.width
 }
 
-func (l *lexer) peek() rune {
+func (l *Lexer) peek() rune {
 	r := l.next()
 	l.backup()
 	return r
 }
 
-func (l *lexer) errorf(format string, args ...interface{}) stateFn {
+func (l *Lexer) errorf(format string, args ...interface{}) stateFn {
 	l.items <- Item{ItemError, fmt.Sprintf(format, args...)}
 	return nil
 }
 
 // consumes the next rune if it's from the valid set
-func (l *lexer) accept(valid string) bool {
+func (l *Lexer) accept(valid string) bool {
 	if strings.ContainsRune(valid, l.next()) {
 		return true
 	}
@@ -132,7 +132,7 @@ func (l *lexer) accept(valid string) bool {
 }
 
 // consumes multiple runes from the valid set
-func (l *lexer) acceptRun(valid string) int {
+func (l *Lexer) acceptRun(valid string) int {
 	cnt := 0
 	for strings.ContainsRune(valid, l.next()) {
 		cnt++
@@ -141,8 +141,8 @@ func (l *lexer) acceptRun(valid string) int {
 	return cnt
 }
 
-func Lex(input string) *lexer {
-	l := &lexer{
+func Lex(input string) *Lexer {
+	l := &Lexer{
 		input: input,
 		state: lexText,
 		items: make(chan Item, 2),
@@ -151,7 +151,7 @@ func Lex(input string) *lexer {
 	return l
 }
 
-func (l *lexer) NextItem() *Item {
+func (l *Lexer) NextItem() *Item {
 	for {
 		select {
 		case item := <-l.items:
@@ -168,7 +168,7 @@ func (l *lexer) NextItem() *Item {
 
 /// State functions
 
-func lexText(l *lexer) stateFn {
+func lexText(l *Lexer) stateFn {
 	for {
 		if strings.HasPrefix(l.input[l.pos:], "(") {
 			if l.pos > l.start {
@@ -190,14 +190,14 @@ func lexText(l *lexer) stateFn {
 	return nil
 }
 
-func lexOpenBracket(l *lexer) stateFn {
+func lexOpenBracket(l *Lexer) stateFn {
 	l.pos++
 	l.level++
 	l.emit(ItemOpenBracket)
 	return lexInsideList
 }
 
-func lexInsideList(l *lexer) stateFn {
+func lexInsideList(l *Lexer) stateFn {
 	for {
 		if strings.HasPrefix(l.input[l.pos:], ")") {
 			return lexCloseBracket
@@ -230,7 +230,7 @@ func lexInsideList(l *lexer) stateFn {
 	}
 }
 
-func lexNumber(l *lexer) stateFn {
+func lexNumber(l *Lexer) stateFn {
 	// optional leading sign
 	bSigned := l.accept("+-")
 	const digits = "0123456789"
@@ -258,7 +258,7 @@ func lexNumber(l *lexer) stateFn {
 	return lexInsideList
 }
 
-func lexCloseBracket(l *lexer) stateFn {
+func lexCloseBracket(l *Lexer) stateFn {
 	l.next()
 	l.emit(ItemCloseBracket)
 	if l.level > 0 {
@@ -274,7 +274,7 @@ func lexCloseBracket(l *lexer) stateFn {
 	return lexText
 }
 
-func lexDoubleQuote(l *lexer) stateFn {
+func lexDoubleQuote(l *Lexer) stateFn {
 	for {
 		r := l.next()
 		if r == '"' {
@@ -286,7 +286,7 @@ func lexDoubleQuote(l *lexer) stateFn {
 	}
 }
 
-func lexQuote(l *lexer) stateFn {
+func lexQuote(l *Lexer) stateFn {
 	for {
 		switch r := l.next(); {
 		case r == eof:
@@ -299,7 +299,7 @@ func lexQuote(l *lexer) stateFn {
 	}
 }
 
-func lexIdentifier(l *lexer) stateFn {
+func lexIdentifier(l *Lexer) stateFn {
 	for {
 		switch r := l.next(); {
 		case r == eof:
