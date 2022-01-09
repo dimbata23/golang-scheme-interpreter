@@ -7,7 +7,7 @@ import (
 	"github.com/dimbata23/golang-scheme-interpreter/pkg/lexer"
 )
 
-type Data interface {
+type Expression interface {
 	String() string // TODO: Add support of qlevels
 }
 
@@ -37,25 +37,25 @@ func (v *Variable) String() string {
 	return v.val
 }
 
-type DataList struct {
-	lst    []interface{ Data }
+type ExprList struct {
+	lst    []interface{ Expression }
 	qlevel int
 }
 
-func (l *DataList) String() string {
+func (l *ExprList) String() string {
 	res := "("
-	for i, data := range l.lst {
+	for i, expr := range l.lst {
 		if i != 0 {
 			res += " "
 		}
-		res += data.String()
+		res += expr.String()
 	}
 
 	return res + ")"
 }
 
-type ProcArgs DataList
-type Procedure func(*ProcArgs) Data
+type ProcArgs ExprList
+type Procedure func(*ProcArgs) Expression
 
 func (proc *Procedure) String() string {
 	panic("not implemented")
@@ -72,7 +72,7 @@ func (s *Symbol) String() string {
 	return s.val
 }
 
-type Lambda DataList
+type Lambda ExprList
 
 type SpecialType int
 
@@ -81,11 +81,11 @@ const (
 	SpecialCloseBracket
 )
 
-type SpecialData struct {
+type SpecialExpr struct {
 	typ SpecialType
 }
 
-func (s *SpecialData) String() string {
+func (s *SpecialExpr) String() string {
 	switch s.typ {
 	case SpecialExit:
 		return "(exit)"
@@ -93,7 +93,7 @@ func (s *SpecialData) String() string {
 		return "Unexpected `)`"
 	}
 
-	return "Unknown special data"
+	return "Unknown special expression"
 }
 
 type Parser struct {
@@ -106,11 +106,11 @@ func Parse(input string) *Parser {
 	}
 }
 
-func (p *Parser) Next() Data {
+func (p *Parser) Next() Expression {
 	return p.next(0)
 }
 
-func (p *Parser) next(qlevel int) Data {
+func (p *Parser) next(qlevel int) Expression {
 	token := p.lexer.NextToken()
 	if token == nil {
 		return nil
@@ -142,36 +142,43 @@ func (p *Parser) next(qlevel int) Data {
 		panic("not implemented")
 
 	case lexer.TokenOpenBracket:
-		res := DataList{lst: make([]interface{ Data }, 0), qlevel: qlevel}
+		res := ExprList{lst: make([]interface{ Expression }, 0), qlevel: qlevel}
 
 		for {
-			indata := p.next(qlevel)
+			inexpr := p.next(qlevel)
 
-			e, isErr := indata.(*Error)
+			e, isErr := inexpr.(*Error)
 			if isErr {
 				return e
 			}
 
-			s, isSpec := indata.(*SpecialData)
+			s, isSpec := inexpr.(*SpecialExpr)
 			if isSpec && s.typ == SpecialCloseBracket {
 				break
 			}
 
-			if indata == nil {
+			if inexpr == nil {
 				return &Error{val: "Unexpected end of file: expected a `)` to close `(`"}
 			}
 
-			res.lst = append(res.lst, indata)
+			res.lst = append(res.lst, inexpr)
 		}
 
 		if len(res.lst) == 0 && res.qlevel == 1 {
 			return &nullsym
 		}
 
+		if len(res.lst) == 1 && res.qlevel == 0 {
+			s, isSpec := res.lst[0].(*Variable)
+			if isSpec && s.val == "exit" {
+				return &SpecialExpr{typ: SpecialExit}
+			}
+		}
+
 		return &res
 
 	case lexer.TokenCloseBracket:
-		return &SpecialData{typ: SpecialCloseBracket}
+		return &SpecialExpr{typ: SpecialCloseBracket}
 
 	case lexer.TokenQuote:
 		return p.next(qlevel + 1)
