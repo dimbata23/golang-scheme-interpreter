@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	str, err := ioutil.ReadFile("D:/Documents/Github/golang-scheme-interpreter/test/testfile.scm")
+	str, err := ioutil.ReadFile("test/testfile.scm")
 	if err == nil {
 		p := parser.Parse(string(str))
 		fmt.Println("Parsing...")
