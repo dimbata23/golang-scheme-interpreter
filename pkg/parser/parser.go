@@ -96,6 +96,11 @@ func (s *SpecialExpr) String() string {
 	return "Unknown special expression"
 }
 
+func IsSpecialExit(e Expression) bool {
+	s, isSpec := e.(*SpecialExpr)
+	return isSpec && s.typ == SpecialExit
+}
+
 type Parser struct {
 	lexer *lexer.Lexer
 }
