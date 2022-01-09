@@ -10,54 +10,54 @@ import (
 	"unicode/utf8"
 )
 
-type itemType int
+type TokenType int
 
 const eof rune = -1
 
 const (
-	ItemError itemType = iota // lexer error occured; value is the error message
-	ItemEOF
-	ItemNumber
-	ItemIdentifier
-	ItemString
-	ItemOpenBracket
-	ItemCloseBracket
-	ItemQuote
-	ItemSkip
-	ItemOutsideBrackets
+	TokenError TokenType = iota // lexer error occured; value is the error message
+	TokenEOF
+	TokenNumber
+	TokenIdentifier
+	TokenString
+	TokenOpenBracket
+	TokenCloseBracket
+	TokenQuote
+	TokenSkip
+	TokenOutsideBrackets
 )
 
-type Item struct {
-	Typ itemType
+type Token struct {
+	Typ TokenType
 	Val string
 }
 
 // Debug info
-func (i Item) String() string {
+func (i Token) String() string {
 	switch i.Typ {
-	case ItemEOF:
+	case TokenEOF:
 		return "EOF"
-	case ItemError:
+	case TokenError:
 		return "Err: " + i.Val
 	}
 
 	str := fmt.Sprintf("(%q, ", i.Val)
 	switch i.Typ {
-	case ItemNumber:
+	case TokenNumber:
 		str += "Number"
-	case ItemIdentifier:
+	case TokenIdentifier:
 		str += "Identifier"
-	case ItemString:
+	case TokenString:
 		str += "String"
-	case ItemOpenBracket:
+	case TokenOpenBracket:
 		str += "OpenBracket"
-	case ItemCloseBracket:
+	case TokenCloseBracket:
 		str += "CloseBracket"
-	case ItemQuote:
+	case TokenQuote:
 		str += "Quote"
-	case ItemSkip:
+	case TokenSkip:
 		str += "Skip"
-	case ItemOutsideBrackets:
+	case TokenOutsideBrackets:
 		str += "OutsideBrackets"
 	}
 
@@ -67,13 +67,13 @@ func (i Item) String() string {
 // Lexer struct
 
 type Lexer struct {
-	input string    // text being lexed
-	start int       // starting position of current item
-	pos   int       // current position in the text
-	width int       // width of last read rune
-	state stateFn   // the state function used for lexing
-	level int       // number of lists opened and not closed
-	items chan Item // output channel of read items
+	input string     // text being lexed
+	start int        // starting position of current item
+	pos   int        // current position in the text
+	width int        // width of last read rune
+	state stateFn    // the state function used for lexing
+	level int        // number of lists opened and not closed
+	items chan Token // output channel of read items
 }
 
 type stateFn func(*Lexer) stateFn
@@ -85,8 +85,8 @@ type stateFn func(*Lexer) stateFn
 // 	close(l.items)
 // }
 
-func (l *Lexer) emit(t itemType) {
-	l.items <- Item{t, l.input[l.start:l.pos]}
+func (l *Lexer) emit(t TokenType) {
+	l.items <- Token{t, l.input[l.start:l.pos]}
 	l.start = l.pos
 }
 
@@ -117,7 +117,7 @@ func (l *Lexer) peek() rune {
 }
 
 func (l *Lexer) errorf(format string, args ...interface{}) stateFn {
-	l.items <- Item{ItemError, fmt.Sprintf(format, args...)}
+	l.items <- Token{TokenError, fmt.Sprintf(format, args...)}
 	return nil
 }
 
@@ -145,17 +145,17 @@ func Lex(input string) *Lexer {
 	l := &Lexer{
 		input: input,
 		state: lexText,
-		items: make(chan Item, 2),
+		items: make(chan Token, 2),
 	}
 
 	return l
 }
 
-func (l *Lexer) NextItem() *Item {
+func (l *Lexer) NextItem() *Token {
 	for {
 		select {
 		case item := <-l.items:
-			if item.Typ == ItemEOF {
+			if item.Typ == TokenEOF {
 				return nil
 			}
 
@@ -172,7 +172,7 @@ func lexText(l *Lexer) stateFn {
 	for {
 		if strings.HasPrefix(l.input[l.pos:], "(") {
 			if l.pos > l.start {
-				l.emit(ItemOutsideBrackets)
+				l.emit(TokenOutsideBrackets)
 			}
 			return lexOpenBracket
 		}
@@ -182,10 +182,10 @@ func lexText(l *Lexer) stateFn {
 	}
 
 	if l.pos > l.start {
-		l.emit(ItemOutsideBrackets)
+		l.emit(TokenOutsideBrackets)
 	}
 
-	l.emit(ItemEOF)
+	l.emit(TokenEOF)
 
 	return nil
 }
@@ -193,7 +193,7 @@ func lexText(l *Lexer) stateFn {
 func lexOpenBracket(l *Lexer) stateFn {
 	l.pos++
 	l.level++
-	l.emit(ItemOpenBracket)
+	l.emit(TokenOpenBracket)
 	return lexInsideList
 }
 
@@ -250,17 +250,17 @@ func lexNumber(l *Lexer) stateFn {
 
 	if bSigned && cnt == 0 {
 		// special case: just + or just -
-		l.emit(ItemIdentifier)
+		l.emit(TokenIdentifier)
 		return lexInsideList
 	}
 
-	l.emit(ItemNumber)
+	l.emit(TokenNumber)
 	return lexInsideList
 }
 
 func lexCloseBracket(l *Lexer) stateFn {
 	l.next()
-	l.emit(ItemCloseBracket)
+	l.emit(TokenCloseBracket)
 	if l.level > 0 {
 		l.level--
 	} else {
@@ -278,7 +278,7 @@ func lexDoubleQuote(l *Lexer) stateFn {
 	for {
 		r := l.next()
 		if r == '"' {
-			l.emit(ItemString)
+			l.emit(TokenString)
 			return lexInsideList
 		} else if r == eof {
 			return l.errorf("unexpected end of file: expected `\"` to close `\"`")
@@ -293,7 +293,7 @@ func lexQuote(l *Lexer) stateFn {
 			return l.errorf("unexpected end of file: expected `)` to close `(`")
 		case unicode.IsSpace(r) || r == ')':
 			l.backup()
-			l.emit(ItemQuote)
+			l.emit(TokenQuote)
 			return lexInsideList
 		}
 	}
@@ -308,7 +308,7 @@ func lexIdentifier(l *Lexer) stateFn {
 		// TODO: change
 		case unicode.IsSpace(r) || r == ')':
 			l.backup()
-			l.emit(ItemIdentifier)
+			l.emit(TokenIdentifier)
 			return lexInsideList
 		}
 	}
