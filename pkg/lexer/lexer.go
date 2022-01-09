@@ -24,7 +24,7 @@ const (
 	ItemCloseBracket
 	ItemQuote
 	ItemSkip
-	ItemText
+	ItemOutsideBrackets
 )
 
 type Item struct {
@@ -32,19 +32,36 @@ type Item struct {
 	Val string
 }
 
+// Debug info
 func (i Item) String() string {
 	switch i.Typ {
 	case ItemEOF:
 		return "EOF"
 	case ItemError:
-		return i.Val
+		return "Err: " + i.Val
 	}
 
-	if len(i.Val) > 16 {
-		return fmt.Sprintf("%.10q...", i.Val)
+	str := fmt.Sprintf("(%q, ", i.Val)
+	switch i.Typ {
+	case ItemNumber:
+		str += "Number"
+	case ItemIdentifier:
+		str += "Identifier"
+	case ItemString:
+		str += "String"
+	case ItemOpenBracket:
+		str += "OpenBracket"
+	case ItemCloseBracket:
+		str += "CloseBracket"
+	case ItemQuote:
+		str += "Quote"
+	case ItemSkip:
+		str += "Skip"
+	case ItemOutsideBrackets:
+		str += "OutsideBrackets"
 	}
 
-	return fmt.Sprintf("%q", i.Val)
+	return str + ")"
 }
 
 // Lexer struct
@@ -115,10 +132,13 @@ func (l *lexer) accept(valid string) bool {
 }
 
 // consumes multiple runes from the valid set
-func (l *lexer) acceptRun(valid string) {
+func (l *lexer) acceptRun(valid string) int {
+	cnt := 0
 	for strings.ContainsRune(valid, l.next()) {
+		cnt++
 	}
 	l.backup()
+	return cnt
 }
 
 func Lex(input string) *lexer {
@@ -152,7 +172,7 @@ func lexText(l *lexer) stateFn {
 	for {
 		if strings.HasPrefix(l.input[l.pos:], "(") {
 			if l.pos > l.start {
-				l.emit(ItemText)
+				l.emit(ItemOutsideBrackets)
 			}
 			return lexOpenBracket
 		}
@@ -162,7 +182,7 @@ func lexText(l *lexer) stateFn {
 	}
 
 	if l.pos > l.start {
-		l.emit(ItemText)
+		l.emit(ItemOutsideBrackets)
 	}
 
 	l.emit(ItemEOF)
@@ -212,11 +232,12 @@ func lexInsideList(l *lexer) stateFn {
 
 func lexNumber(l *lexer) stateFn {
 	// optional leading sign
-	l.accept("+-")
+	bSigned := l.accept("+-")
 	const digits = "0123456789"
-	l.acceptRun(digits)
+	cnt := l.acceptRun(digits)
 	if l.accept(".") {
-		l.acceptRun(digits)
+		cnt++
+		cnt += l.acceptRun(digits)
 	}
 
 	extAlpha := "+-.*/<=>!?:$%_&~^"
@@ -225,6 +246,12 @@ func lexNumber(l *lexer) stateFn {
 
 	if unicode.IsLetter(r) || strings.ContainsRune(extAlpha, r) {
 		return lexIdentifier
+	}
+
+	if bSigned && cnt == 0 {
+		// special case: just + or just -
+		l.emit(ItemIdentifier)
+		return lexInsideList
 	}
 
 	l.emit(ItemNumber)

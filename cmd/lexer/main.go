@@ -18,12 +18,10 @@ func main() {
 				break
 			}
 
-			if item.Typ != lexer.ItemText {
-				fmt.Println(item)
-			}
+			fmt.Println(item)
 		}
 		fmt.Println("Done.")
 	} else {
-		fmt.Println("File not opened.")
+		fmt.Println(err.Error())
 	}
 }
