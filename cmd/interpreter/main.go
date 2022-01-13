@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"os"
 
 	"github.com/dimbata23/golang-scheme-interpreter/pkg/interpreter"
 )
@@ -9,11 +11,12 @@ import (
 func main() {
 	i := interpreter.MakeInterpreter()
 	for {
-		var input string
-		fmt.Print(">")
-		_, err := fmt.Scanln(&input)
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Print("> ")
+
+		input, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Println(err)
+			fmt.Printf("ERR READING: %s\n", err)
 		}
 
 		status := i.Interpret(input)

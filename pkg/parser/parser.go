@@ -29,22 +29,22 @@ func (n *Number) String() string {
 }
 
 type Variable struct {
-	val string
+	Val string
 }
 
 func (v *Variable) String() string {
 	//panic("not implemented")
-	return v.val
+	return v.Val
 }
 
 type ExprList struct {
-	lst    []interface{ Expression }
+	Lst    []interface{ Expression }
 	qlevel int
 }
 
 func (l *ExprList) String() string {
 	res := "("
-	for i, expr := range l.lst {
+	for i, expr := range l.Lst {
 		if i != 0 {
 			res += " "
 		}
@@ -61,6 +61,15 @@ func (proc *Procedure) String() string {
 	panic("not implemented")
 }
 
+type Lambda struct {
+	Name string
+	Lst  []interface{ Expression }
+}
+
+func (proc *Lambda) String() string {
+	panic("not implemented")
+}
+
 type Symbol struct {
 	val    string
 	qlevel int
@@ -68,11 +77,17 @@ type Symbol struct {
 
 var nullsym = Symbol{val: "()", qlevel: 1}
 
+func IsNullSym(expr Expression) bool {
+	if s, isSym := expr.(*Symbol); isSym {
+		return *s == nullsym
+	}
+
+	return false
+}
+
 func (s *Symbol) String() string {
 	return s.val
 }
-
-type Lambda ExprList
 
 type SpecialType int
 
@@ -138,7 +153,7 @@ func (p *Parser) next(qlevel int) Expression {
 
 	case lexer.TokenIdentifier:
 		if qlevel == 0 {
-			return &Variable{val: token.Val}
+			return &Variable{Val: token.Val}
 		}
 
 		return &Symbol{val: token.Val, qlevel: qlevel}
@@ -147,7 +162,7 @@ func (p *Parser) next(qlevel int) Expression {
 		panic("not implemented")
 
 	case lexer.TokenOpenBracket:
-		res := ExprList{lst: make([]interface{ Expression }, 0), qlevel: qlevel}
+		res := ExprList{Lst: make([]interface{ Expression }, 0), qlevel: qlevel}
 
 		for {
 			inexpr := p.next(qlevel)
@@ -166,16 +181,16 @@ func (p *Parser) next(qlevel int) Expression {
 				return &Error{val: "Unexpected end of file: expected a `)` to close `(`"}
 			}
 
-			res.lst = append(res.lst, inexpr)
+			res.Lst = append(res.Lst, inexpr)
 		}
 
-		if len(res.lst) == 0 && res.qlevel == 1 {
+		if len(res.Lst) == 0 && res.qlevel == 1 {
 			return &nullsym
 		}
 
-		if len(res.lst) == 1 && res.qlevel == 0 {
-			s, isSpec := res.lst[0].(*Variable)
-			if isSpec && s.val == "exit" {
+		if len(res.Lst) == 1 && res.qlevel == 0 {
+			s, isSpec := res.Lst[0].(*Variable)
+			if isSpec && s.Val == "exit" {
 				return &SpecialExpr{typ: SpecialExit}
 			}
 		}

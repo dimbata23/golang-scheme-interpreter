@@ -137,7 +137,7 @@ func (l *Lexer) acceptRun(valid string) int {
 func Lex(input string) *Lexer {
 	l := &Lexer{
 		input:  input,
-		state:  lexText,
+		state:  lexGeneral,
 		tokens: make(chan Token, 2),
 	}
 
@@ -154,43 +154,47 @@ func (l *Lexer) NextToken() *Token {
 
 			return &token
 		default:
-			l.state = l.state(l)
+			if l.state != nil {
+				l.state = l.state(l)
+			} else {
+				l.state = lexGeneral
+			}
 		}
 	}
 }
 
 /// State functions
 
-func lexText(l *Lexer) stateFn {
-	for {
-		if strings.HasPrefix(l.input[l.pos:], "(") {
-			if l.pos > l.start {
-				l.emit(TokenOutsideBrackets)
-			}
-			return lexOpenBracket
-		}
-		if l.next() == eof {
-			break
-		}
-	}
+// func lexOutsideList(l *Lexer) stateFn {
+// 	for {
+// 		if strings.HasPrefix(l.input[l.pos:], "(") {
+// 			if l.pos > l.start {
+// 				l.emit(TokenOutsideBrackets)
+// 			}
+// 			return lexOpenBracket
+// 		}
+// 		if l.next() == eof {
+// 			break
+// 		}
+// 	}
 
-	if l.pos > l.start {
-		l.emit(TokenOutsideBrackets)
-	}
+// 	if l.pos > l.start {
+// 		l.emit(TokenOutsideBrackets)
+// 	}
 
-	l.emit(TokenEOF)
+// 	l.emit(TokenEOF)
 
-	return nil
-}
+// 	return nil
+// }
 
 func lexOpenBracket(l *Lexer) stateFn {
 	l.pos++
 	l.level++
 	l.emit(TokenOpenBracket)
-	return lexInsideList
+	return lexGeneral
 }
 
-func lexInsideList(l *Lexer) stateFn {
+func lexGeneral(l *Lexer) stateFn {
 	for {
 		if strings.HasPrefix(l.input[l.pos:], ")") {
 			return lexCloseBracket
@@ -202,7 +206,13 @@ func lexInsideList(l *Lexer) stateFn {
 
 		switch r := l.next(); {
 		case r == eof:
-			return l.errorf("unexpected end of file: expected `)` to close `(`")
+			if l.level > 0 {
+				l.emit(TokenEOF)
+				return l.errorf("unexpected end of file: expected a `)` to close `(`")
+			} else {
+				l.emit(TokenEOF)
+				return lexGeneral
+			}
 		case unicode.IsSpace(r):
 			l.ignore()
 		case r == '"':
@@ -244,11 +254,11 @@ func lexNumber(l *Lexer) stateFn {
 	if bSigned && cnt == 0 {
 		// special case: just + or just -
 		l.emit(TokenIdentifier)
-		return lexInsideList
+		return lexGeneral
 	}
 
 	l.emit(TokenNumber)
-	return lexInsideList
+	return lexGeneral
 }
 
 func lexCloseBracket(l *Lexer) stateFn {
@@ -261,10 +271,10 @@ func lexCloseBracket(l *Lexer) stateFn {
 	}
 
 	if l.level > 0 {
-		return lexInsideList
+		return lexGeneral
 	}
 
-	return lexText
+	return lexGeneral
 }
 
 func lexDoubleQuote(l *Lexer) stateFn {
@@ -272,7 +282,7 @@ func lexDoubleQuote(l *Lexer) stateFn {
 		r := l.next()
 		if r == '"' {
 			l.emit(TokenString)
-			return lexInsideList
+			return lexGeneral
 		} else if r == eof {
 			return l.errorf("unexpected end of file: expected `\"` to close `\"`")
 		}
@@ -287,7 +297,7 @@ func lexQuote(l *Lexer) stateFn {
 		case unicode.IsSpace(r) || r == ')':
 			l.backup()
 			l.emit(TokenQuote)
-			return lexInsideList
+			return lexGeneral
 		}
 	}
 }
@@ -302,7 +312,7 @@ func lexIdentifier(l *Lexer) stateFn {
 		case unicode.IsSpace(r) || r == ')':
 			l.backup()
 			l.emit(TokenIdentifier)
-			return lexInsideList
+			return lexGeneral
 		}
 	}
 }
