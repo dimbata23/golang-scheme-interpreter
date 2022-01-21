@@ -89,7 +89,7 @@ func IsNullSym(expr Expression) bool {
 }
 
 func (s *Symbol) String() string {
-	return s.val
+	return strings.Repeat("'", s.qlevel) + s.val
 }
 
 type SpecialType int
