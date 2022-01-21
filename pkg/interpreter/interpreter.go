@@ -32,6 +32,11 @@ func (env *environment) eval(expr p.Expression) p.Expression {
 			return ex
 		}
 
+		if len(ex.Lst) == 0 {
+			println("DEBUG: Missing procedure")
+			return nil // TODO: return an error with the msg?
+		}
+
 		if len(ex.Lst) == 1 && p.IsNullSym(ex.Lst[0]) {
 			panic("shouldn't happen")
 		}
@@ -61,7 +66,7 @@ func makeEnvironment(parent *environment, params *p.ExprList, args *p.ExprList) 
 		if vp, isVar := param.(*p.Variable); isVar {
 			resEnv.vars[vp.Val] = args.Lst[i]
 		} else {
-			fmt.Printf("DEBUG: non-variable param given %q", param.String())
+			fmt.Printf("DEBUG: non-variable param given %q\n", param.String())
 		}
 	}
 
@@ -69,11 +74,6 @@ func makeEnvironment(parent *environment, params *p.ExprList, args *p.ExprList) 
 }
 
 func (env *environment) evalProcLambda(lst *p.ExprList) p.Expression {
-	if len(lst.Lst) == 0 {
-		println("DEBUG: Missing procedure")
-		return nil // TODO: return an error with the msg?
-	}
-
 	pr := env.eval(lst.Lst[0])
 	if pr == nil {
 		fmt.Printf("DEBUG: unknown %q\n", lst.Lst[0].String())
@@ -84,7 +84,7 @@ func (env *environment) evalProcLambda(lst *p.ExprList) p.Expression {
 	lambda, isLambda := pr.(*p.Lambda)
 
 	if !isProc && !isLambda {
-		fmt.Printf("DEBUG: %q not a procedure", pr.String())
+		fmt.Printf("DEBUG: %q not a procedure\n", pr.String())
 		return nil // TODO:
 	}
 
