@@ -54,20 +54,22 @@ func (l *ExprList) String() string {
 	return res + ")"
 }
 
-type ProcArgs ExprList
-type Procedure func(*ProcArgs) Expression
+type Procedure struct {
+	Fn func(*ExprList) Expression
+}
 
 func (proc *Procedure) String() string {
 	panic("not implemented")
 }
 
 type Lambda struct {
-	Name string
-	Lst  []interface{ Expression }
+	Name   string
+	Params *ExprList
+	Body   *ExprList
 }
 
-func (proc *Lambda) String() string {
-	panic("not implemented")
+func (lambda *Lambda) String() string {
+	return fmt.Sprintf("#<lambda %s>", lambda.Name)
 }
 
 type Symbol struct {
