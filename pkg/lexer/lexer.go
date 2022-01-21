@@ -290,16 +290,9 @@ func lexDoubleQuote(l *Lexer) stateFn {
 }
 
 func lexQuote(l *Lexer) stateFn {
-	for {
-		switch r := l.next(); {
-		case r == eof:
-			return l.errorf("unexpected end of file: expected `)` to close `(`")
-		case unicode.IsSpace(r) || r == ')':
-			l.backup()
-			l.emit(TokenQuote)
-			return lexGeneral
-		}
-	}
+	l.pos++
+	l.emit(TokenQuote)
+	return lexGeneral
 }
 
 func lexIdentifier(l *Lexer) stateFn {

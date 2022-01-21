@@ -16,7 +16,7 @@ func main() {
 
 		input, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Printf("ERR READING: %s\n", err)
+			fmt.Printf("DEBUG: ERR READING: %s\n", err)
 		}
 
 		status := i.Interpret(input)

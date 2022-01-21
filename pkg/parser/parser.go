@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/dimbata23/golang-scheme-interpreter/pkg/lexer"
 )
@@ -39,11 +40,11 @@ func (v *Variable) String() string {
 
 type ExprList struct {
 	Lst    []interface{ Expression }
-	qlevel int
+	Qlevel int
 }
 
 func (l *ExprList) String() string {
-	res := "("
+	res := strings.Repeat("'", l.Qlevel) + "("
 	for i, expr := range l.Lst {
 		if i != 0 {
 			res += " "
@@ -164,7 +165,7 @@ func (p *Parser) next(qlevel int) Expression {
 		panic("not implemented")
 
 	case lexer.TokenOpenBracket:
-		res := ExprList{Lst: make([]interface{ Expression }, 0), qlevel: qlevel}
+		res := ExprList{Lst: make([]interface{ Expression }, 0), Qlevel: qlevel}
 
 		for {
 			inexpr := p.next(qlevel)
@@ -186,11 +187,11 @@ func (p *Parser) next(qlevel int) Expression {
 			res.Lst = append(res.Lst, inexpr)
 		}
 
-		if len(res.Lst) == 0 && res.qlevel == 1 {
+		if len(res.Lst) == 0 && res.Qlevel == 1 {
 			return &nullsym
 		}
 
-		if len(res.Lst) == 1 && res.qlevel == 0 {
+		if len(res.Lst) == 1 && res.Qlevel == 0 {
 			s, isSpec := res.Lst[0].(*Variable)
 			if isSpec && s.Val == "exit" {
 				return &SpecialExpr{typ: SpecialExit}

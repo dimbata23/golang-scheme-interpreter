@@ -1,6 +1,8 @@
 package interpreter
 
 import (
+	"fmt"
+
 	p "github.com/dimbata23/golang-scheme-interpreter/pkg/parser"
 )
 
@@ -26,25 +28,25 @@ func (env *environment) eval(expr p.Expression) p.Expression {
 		//return env.evalProcLambda(ex)
 
 	case *p.ExprList:
+		if ex.Qlevel > 0 {
+			return ex
+		}
+
 		if len(ex.Lst) == 1 && p.IsNullSym(ex.Lst[0]) {
 			panic("shouldn't happen")
 		}
 
-		// return env.evalProcLambda(ex)
-
+		// Special forms
 		if v, isVar := ex.Lst[0].(*p.Variable); isVar {
 			switch v.Val {
 			case "define":
 				return env.evalDefine(ex)
 				//lambda, if, cond, apply, map, quote, begin, .. ?
-			default:
-				//panic("unimplemented")
-				return env.evalProcLambda(ex)
 			}
-		} else {
-			//panic("unimplemented")
-			return env.evalProcLambda(ex)
 		}
+
+		// Non-special form
+		return env.evalProcLambda(ex)
 
 	default:
 		return nil
@@ -59,7 +61,7 @@ func makeEnvironment(parent *environment, params *p.ExprList, args *p.ExprList) 
 		if vp, isVar := param.(*p.Variable); isVar {
 			resEnv.vars[vp.Val] = args.Lst[i]
 		} else {
-			println("non-variable param given")
+			fmt.Printf("DEBUG: non-variable param given %q", param.String())
 		}
 	}
 
@@ -68,12 +70,13 @@ func makeEnvironment(parent *environment, params *p.ExprList, args *p.ExprList) 
 
 func (env *environment) evalProcLambda(lst *p.ExprList) p.Expression {
 	if len(lst.Lst) == 0 {
-		println("Missing procedure")
+		println("DEBUG: Missing procedure")
 		return nil // TODO: return an error with the msg?
 	}
 
 	pr := env.eval(lst.Lst[0])
 	if pr == nil {
+		fmt.Printf("DEBUG: unknown %q\n", lst.Lst[0].String())
 		return nil // TODO: err?
 	}
 
@@ -81,6 +84,7 @@ func (env *environment) evalProcLambda(lst *p.ExprList) p.Expression {
 	lambda, isLambda := pr.(*p.Lambda)
 
 	if !isProc && !isLambda {
+		fmt.Printf("DEBUG: %q not a procedure", pr.String())
 		return nil // TODO:
 	}
 
@@ -90,7 +94,7 @@ func (env *environment) evalProcLambda(lst *p.ExprList) p.Expression {
 	for i, arg := range lst.Lst[1:] {
 		args.Lst[i] = env.eval(arg) // TODO: concurency/parallelism
 		if args.Lst[i] == nil {
-			println("sth wrong with an argument")
+			println("DEBUG: something broke while evaluating proc/lambda arguments")
 			return nil
 		}
 	}
@@ -99,7 +103,7 @@ func (env *environment) evalProcLambda(lst *p.ExprList) p.Expression {
 		proc.Fn(&args)
 	} else if isLambda {
 		if len(lambda.Params.Lst) != len(args.Lst) {
-			println("Arity mismatch")
+			println("DEBUG: arity mismatch")
 			return nil // TODO:
 		}
 
@@ -108,6 +112,7 @@ func (env *environment) evalProcLambda(lst *p.ExprList) p.Expression {
 		for _, expr := range lambda.Body.Lst {
 			res = lambdaEnv.eval(expr)
 			if res == nil {
+				println("DEBUG: something broke while evaluating lambda body")
 				return nil // TODO:
 			}
 		}
@@ -136,13 +141,13 @@ func (env *environment) evalDefine(lst *p.ExprList) p.Expression {
 	len := len(lst.Lst)
 
 	if len < 3 {
-		println("bad syntax: define needs at least 2 arguments")
+		println("DEBUG: bad syntax: define needs at least 2 arguments")
 		return nil
 	}
 
 	if len > 3 {
 		if _, isLst := lst.Lst[1].(*p.ExprList); !isLst {
-			println("bad syntax: define expects exactly one expression after identifier")
+			println("DEBUG: bad syntax: define expects exactly one expression after identifier")
 			return nil
 		}
 	}
@@ -158,7 +163,8 @@ func (env *environment) evalDefine(lst *p.ExprList) p.Expression {
 			body := p.ExprList{Lst: lst.Lst[2:]}
 			res = &p.Lambda{Name: ident, Params: &params, Body: &body}
 		} else {
-			panic("unimplemented")
+			println("DEBUG: lambda definition name not of variable type")
+			return nil // TODO:
 		}
 
 	case *p.Variable: // Variable definition
@@ -166,7 +172,8 @@ func (env *environment) evalDefine(lst *p.ExprList) p.Expression {
 		res = env.eval(lst.Lst[2])
 
 	default:
-		panic("unimplemented")
+		println("DEBUG: wrong argument type")
+		return nil // TODO:
 	}
 
 	env.vars[ident] = res
