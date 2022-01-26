@@ -286,6 +286,74 @@ func procMultiply(args *p.ExprList) p.Expression {
 	return procAddMult(args, false)
 }
 
+func procComp(args *p.ExprList, comp func(*p.Number, *p.Number) bool) p.Expression {
+	if len(args.Lst) == 0 {
+		return &p.TrueSym
+	}
+
+	lastNum, isNum := args.Lst[0].(*p.Number)
+	if !isNum {
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String())
+		return nil // TODO:
+	}
+
+	for _, ex := range args.Lst[1:] {
+		num, isNum := ex.(*p.Number)
+		if !isNum {
+			fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String())
+			return nil // TODO:
+		}
+
+		if !comp(lastNum, num) {
+			return &p.FalseSym
+		}
+
+		lastNum = num
+	}
+
+	return &p.TrueSym
+}
+
+func less(lhs *p.Number, rhs *p.Number) bool {
+	return lhs.Val < rhs.Val
+}
+
+func lessEq(lhs *p.Number, rhs *p.Number) bool {
+	return lhs.Val <= rhs.Val
+}
+
+func greater(lhs *p.Number, rhs *p.Number) bool {
+	return lhs.Val > rhs.Val
+}
+
+func greaterEq(lhs *p.Number, rhs *p.Number) bool {
+	return lhs.Val >= rhs.Val
+}
+
+func equal(lhs *p.Number, rhs *p.Number) bool {
+	return lhs.Val == rhs.Val
+}
+
+func procLess(args *p.ExprList) p.Expression {
+	return procComp(args, less)
+}
+
+func procLessEq(args *p.ExprList) p.Expression {
+	return procComp(args, lessEq)
+}
+
+func procGreater(args *p.ExprList) p.Expression {
+	return procComp(args, greater)
+}
+
+func procGreaterEq(args *p.ExprList) p.Expression {
+	return procComp(args, greaterEq)
+}
+
+func procEquals(args *p.ExprList) p.Expression {
+	return procComp(args, equal)
+}
+
 type interpreter struct {
 	genv environment
 }
@@ -299,6 +367,11 @@ func (i *interpreter) addDefaultDefs() *interpreter {
 		"*":  &p.Procedure{Fn: procMultiply},
 		"-":  &p.Procedure{Fn: procSubtract},
 		"/":  &p.Procedure{Fn: procDivide},
+		"=":  &p.Procedure{Fn: procEquals},
+		"<":  &p.Procedure{Fn: procLess},
+		"<=": &p.Procedure{Fn: procLessEq},
+		">":  &p.Procedure{Fn: procGreater},
+		">=": &p.Procedure{Fn: procGreaterEq},
 	}
 
 	return i
