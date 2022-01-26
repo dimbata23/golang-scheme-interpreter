@@ -206,8 +206,61 @@ func (env *environment) evalDefine(lst *p.ExprList) p.Expression {
 	return res
 }
 
-func procAdd(args *p.ExprList) p.Expression {
+func procSubDiv(args *p.ExprList, isSub bool) p.Expression {
 	res := 0.0
+	if !isSub {
+		res = 1
+	}
+
+	if len(args.Lst) == 0 {
+		return &p.Number{Val: res}
+	}
+
+	fnum, isNum := args.Lst[0].(*p.Number)
+	if !isNum {
+		println("DEBUG: wrong argument type, only numbers expected")
+		return nil // TODO:
+	}
+	res = fnum.Val
+
+	if len(args.Lst) == 1 {
+		if isSub {
+			return &p.Number{Val: -res}
+		} else {
+			return &p.Number{Val: 1 / res}
+		}
+	}
+
+	for _, ex := range args.Lst[1:] {
+		num, isNum := ex.(*p.Number)
+		if !isNum {
+			println("DEBUG: wrong argument type, only numbers expected")
+			return nil // TODO:
+		}
+		if isSub {
+			res -= num.Val
+		} else {
+			res /= num.Val
+		}
+	}
+
+	return &p.Number{Val: res}
+}
+
+func procSubtract(args *p.ExprList) p.Expression {
+	return procSubDiv(args, true)
+}
+
+func procDivide(args *p.ExprList) p.Expression {
+	return procSubDiv(args, false)
+}
+
+func procAddMult(args *p.ExprList, isAdd bool) p.Expression {
+	res := 0.0
+	if !isAdd {
+		res = 1
+	}
+
 	for _, ex := range args.Lst {
 		num, isNum := ex.(*p.Number)
 		if !isNum {
@@ -215,10 +268,22 @@ func procAdd(args *p.ExprList) p.Expression {
 			return nil // TODO:
 		}
 
-		res += num.Val
+		if isAdd {
+			res += num.Val
+		} else {
+			res *= num.Val
+		}
 	}
 
 	return &p.Number{Val: res}
+}
+
+func procAdd(args *p.ExprList) p.Expression {
+	return procAddMult(args, true)
+}
+
+func procMultiply(args *p.ExprList) p.Expression {
+	return procAddMult(args, false)
 }
 
 type interpreter struct {
@@ -231,6 +296,9 @@ func (i *interpreter) addDefaultDefs() *interpreter {
 		"#f": &p.FalseSym,
 		"#t": &p.TrueSym,
 		"+":  &p.Procedure{Fn: procAdd},
+		"*":  &p.Procedure{Fn: procMultiply},
+		"-":  &p.Procedure{Fn: procSubtract},
+		"/":  &p.Procedure{Fn: procDivide},
 	}
 
 	return i
