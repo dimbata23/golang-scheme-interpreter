@@ -372,6 +372,7 @@ func (i *interpreter) addDefaultDefs() *interpreter {
 		"<=": &p.Procedure{Fn: procLessEq},
 		">":  &p.Procedure{Fn: procGreater},
 		">=": &p.Procedure{Fn: procGreaterEq},
+		// TODO: list, cons, car, cdr, number?, null?, pair?, list?, string?, and, or, remainder, quotient, expt, display
 	}
 
 	return i
