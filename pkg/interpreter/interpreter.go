@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"fmt"
+	"math"
 
 	p "github.com/dimbata23/golang-scheme-interpreter/pkg/parser"
 )
@@ -354,6 +355,121 @@ func procEquals(args *p.ExprList) p.Expression {
 	return procComp(args, equal)
 }
 
+func procIsNumber(args *p.ExprList) p.Expression {
+	if len(args.Lst) != 1 {
+		fmt.Printf("DEBUG: arity mismatch\n")
+		return nil // TODO:
+	}
+
+	if _, isNum := args.Lst[0].(*p.Number); isNum {
+		return &p.TrueSym
+	}
+
+	return &p.FalseSym
+}
+
+func procIsNull(args *p.ExprList) p.Expression {
+	if len(args.Lst) != 1 {
+		fmt.Printf("DEBUG: arity mismatch\n")
+		return nil // TODO:
+	}
+
+	if p.IsNullSym(args.Lst[0]) {
+		return &p.TrueSym
+	}
+
+	return &p.FalseSym
+}
+
+func procAnd(args *p.ExprList) p.Expression {
+	res := p.Expression(&p.TrueSym)
+
+	for _, ex := range args.Lst {
+		if p.IsFalseSym(ex) {
+			return &p.FalseSym
+		}
+
+		res = ex
+	}
+
+	return res
+}
+
+func procOr(args *p.ExprList) p.Expression {
+	res := p.Expression(&p.FalseSym)
+
+	for _, ex := range args.Lst {
+		if !p.IsFalseSym(ex) {
+			return ex
+		}
+	}
+
+	return res
+}
+
+func procRemainder(args *p.ExprList) p.Expression {
+	if len(args.Lst) != 2 {
+		fmt.Printf("DEBUG: arity mismatch, expected 2\n")
+		return nil // TODO:
+	}
+
+	num, isNum := args.Lst[0].(*p.Number)
+	if !isNum {
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String())
+		return nil // TODO:
+	}
+
+	div, isNumDiv := args.Lst[1].(*p.Number)
+	if !isNumDiv {
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[1].String())
+		return nil // TODO:
+	}
+
+	return &p.Number{Val: float64(int64(num.Val) % int64(div.Val))}
+}
+
+func procQuotient(args *p.ExprList) p.Expression {
+	if len(args.Lst) != 2 {
+		fmt.Printf("DEBUG: arity mismatch, expected 2\n")
+		return nil // TODO:
+	}
+
+	num, isNum := args.Lst[0].(*p.Number)
+	if !isNum {
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String())
+		return nil // TODO:
+	}
+
+	div, isNumDiv := args.Lst[1].(*p.Number)
+	if !isNumDiv {
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[1].String())
+		return nil // TODO:
+	}
+
+	return &p.Number{Val: float64(int64(num.Val) / int64(div.Val))}
+}
+
+func procExpt(args *p.ExprList) p.Expression {
+	if len(args.Lst) != 2 {
+		fmt.Printf("DEBUG: arity mismatch, expected 2\n")
+		return nil // TODO:
+	}
+
+	num, isNum := args.Lst[0].(*p.Number)
+	if !isNum {
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String())
+		return nil // TODO:
+	}
+
+	exp, isExpDiv := args.Lst[1].(*p.Number)
+	if !isExpDiv {
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[1].String())
+		return nil // TODO:
+	}
+
+	return &p.Number{Val: math.Pow(num.Val, exp.Val)}
+}
+
 type interpreter struct {
 	genv environment
 }
@@ -361,18 +477,25 @@ type interpreter struct {
 func (i *interpreter) addDefaultDefs() *interpreter {
 	i.genv.parent = nil
 	i.genv.vars = map[string]p.Expression{
-		"#f": &p.FalseSym,
-		"#t": &p.TrueSym,
-		"+":  &p.Procedure{Fn: procAdd},
-		"*":  &p.Procedure{Fn: procMultiply},
-		"-":  &p.Procedure{Fn: procSubtract},
-		"/":  &p.Procedure{Fn: procDivide},
-		"=":  &p.Procedure{Fn: procEquals},
-		"<":  &p.Procedure{Fn: procLess},
-		"<=": &p.Procedure{Fn: procLessEq},
-		">":  &p.Procedure{Fn: procGreater},
-		">=": &p.Procedure{Fn: procGreaterEq},
-		// TODO: list, cons, car, cdr, number?, null?, pair?, list?, string?, and, or, remainder, quotient, expt, display
+		"#f":        &p.FalseSym,
+		"#t":        &p.TrueSym,
+		"+":         &p.Procedure{Fn: procAdd},
+		"*":         &p.Procedure{Fn: procMultiply},
+		"-":         &p.Procedure{Fn: procSubtract},
+		"/":         &p.Procedure{Fn: procDivide},
+		"=":         &p.Procedure{Fn: procEquals},
+		"<":         &p.Procedure{Fn: procLess},
+		"<=":        &p.Procedure{Fn: procLessEq},
+		">":         &p.Procedure{Fn: procGreater},
+		">=":        &p.Procedure{Fn: procGreaterEq},
+		"number?":   &p.Procedure{Fn: procIsNumber},
+		"null?":     &p.Procedure{Fn: procIsNull},
+		"and":       &p.Procedure{Fn: procAnd},
+		"or":        &p.Procedure{Fn: procOr},
+		"remainder": &p.Procedure{Fn: procRemainder},
+		"quotient":  &p.Procedure{Fn: procQuotient},
+		"expt":      &p.Procedure{Fn: procExpt},
+		// TODO: list, cons, car, cdr, pair?, list?, string?, display
 	}
 
 	return i
