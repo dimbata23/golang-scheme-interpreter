@@ -78,18 +78,32 @@ type Symbol struct {
 	qlevel int
 }
 
-var nullsym = Symbol{val: "()", qlevel: 1}
+var NullSym = Symbol{val: "()", qlevel: 1}
+var FalseSym = Symbol{val: "#f", qlevel: 1}
+var TrueSym = Symbol{val: "#t", qlevel: 1}
 
 func IsNullSym(expr Expression) bool {
 	if s, isSym := expr.(*Symbol); isSym {
-		return *s == nullsym
+		return *s == NullSym
+	}
+
+	return false
+}
+
+func IsFalseSym(expr Expression) bool {
+	if s, isSym := expr.(*Symbol); isSym {
+		return *s == FalseSym
 	}
 
 	return false
 }
 
 func (s *Symbol) String() string {
-	return strings.Repeat("'", s.qlevel) + s.val
+	qs := s.qlevel
+	if *s == FalseSym || *s == TrueSym {
+		qs -= 1
+	}
+	return strings.Repeat("'", qs) + s.val
 }
 
 type SpecialType int
@@ -188,7 +202,7 @@ func (p *Parser) next(qlevel int) Expression {
 		}
 
 		if len(res.Lst) == 0 && res.Qlevel == 1 {
-			return &nullsym
+			return &NullSym
 		}
 
 		if len(res.Lst) == 1 && res.Qlevel == 0 {

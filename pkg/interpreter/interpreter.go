@@ -47,6 +47,8 @@ func (env *environment) eval(expr p.Expression) p.Expression {
 			case "define":
 				return env.evalDefine(ex)
 				//lambda, if, cond, apply, map, quote, begin, .. ?
+			case "if":
+				return env.evalIf(ex)
 			}
 		}
 
@@ -71,6 +73,31 @@ func makeEnvironment(parent *environment, params *p.ExprList, args *p.ExprList) 
 	}
 
 	return resEnv
+}
+
+func (env *environment) evalIf(lst *p.ExprList) p.Expression {
+	cond := env.eval(lst.Lst[1])
+	if cond == nil {
+		fmt.Printf("DEBUG: unknown %q\n", lst.Lst[1].String())
+		return nil // TODO: err?
+	}
+
+	if len(lst.Lst) < 3 || len(lst.Lst) > 4 {
+		fmt.Printf("DEBUG: bad syntax: if expects 2 or 3 arguments\n")
+		return nil // TODO: err?
+	}
+
+	if p.IsFalseSym(cond) {
+		// false case
+		if len(lst.Lst) == 4 {
+			return env.eval(lst.Lst[3])
+		}
+
+		return nil // TODO: void type
+	}
+
+	// true case
+	return env.eval(lst.Lst[2])
 }
 
 func (env *environment) evalProcLambda(lst *p.ExprList) p.Expression {
@@ -185,21 +212,24 @@ type interpreter struct {
 	genv environment
 }
 
-func (i *interpreter) addDefaultProcs() *interpreter {
+func (i *interpreter) addDefaultDefs() *interpreter {
 	i.genv.parent = nil
-	i.genv.vars = map[string]p.Expression{}
+	i.genv.vars = map[string]p.Expression{
+		"#f": &p.FalseSym,
+		"#t": &p.TrueSym,
+	}
 
 	return i
 }
 
 func NewInterpreter() *interpreter {
 	res := interpreter{}
-	return res.addDefaultProcs()
+	return res.addDefaultDefs()
 }
 
 func MakeInterpreter() interpreter {
 	res := interpreter{}
-	return *res.addDefaultProcs()
+	return *res.addDefaultDefs()
 }
 
 type Status int
