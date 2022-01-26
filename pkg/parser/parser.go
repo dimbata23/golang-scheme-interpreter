@@ -21,12 +21,12 @@ func (e *Error) String() string {
 }
 
 type Number struct {
-	val    float64
+	Val    float64
 	qlevel int
 }
 
 func (n *Number) String() string {
-	return fmt.Sprintf("%f", n.val)
+	return fmt.Sprintf("%f", n.Val)
 }
 
 type Variable struct {
@@ -60,7 +60,7 @@ type Procedure struct {
 }
 
 func (proc *Procedure) String() string {
-	panic("not implemented")
+	return "#<procedure>"
 }
 
 type Lambda struct {
@@ -166,7 +166,7 @@ func (p *Parser) next(qlevel int) Expression {
 		if err != nil {
 			return &Error{val: err.Error()}
 		}
-		return &Number{val: num, qlevel: qlevel}
+		return &Number{Val: num, qlevel: qlevel}
 
 	case lexer.TokenIdentifier:
 		if qlevel == 0 {

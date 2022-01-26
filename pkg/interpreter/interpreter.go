@@ -127,7 +127,7 @@ func (env *environment) evalProcLambda(lst *p.ExprList) p.Expression {
 	}
 
 	if isProc {
-		proc.Fn(&args)
+		return proc.Fn(&args)
 	} else if isLambda {
 		if len(lambda.Params.Lst) != len(args.Lst) {
 			println("DEBUG: arity mismatch")
@@ -156,9 +156,7 @@ func (env *environment) find(val string) p.Expression {
 	}
 
 	if env.parent != nil {
-		if val, ok := env.parent.vars[val]; ok {
-			return val
-		}
+		return env.parent.find(val)
 	}
 
 	return nil
@@ -208,6 +206,21 @@ func (env *environment) evalDefine(lst *p.ExprList) p.Expression {
 	return res
 }
 
+func procAdd(args *p.ExprList) p.Expression {
+	res := 0.0
+	for _, ex := range args.Lst {
+		num, isNum := ex.(*p.Number)
+		if !isNum {
+			println("DEBUG: wrong argument type, only numbers expected")
+			return nil // TODO:
+		}
+
+		res += num.Val
+	}
+
+	return &p.Number{Val: res}
+}
+
 type interpreter struct {
 	genv environment
 }
@@ -217,6 +230,7 @@ func (i *interpreter) addDefaultDefs() *interpreter {
 	i.genv.vars = map[string]p.Expression{
 		"#f": &p.FalseSym,
 		"#t": &p.TrueSym,
+		"+":  &p.Procedure{Fn: procAdd},
 	}
 
 	return i
