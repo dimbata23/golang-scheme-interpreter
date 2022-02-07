@@ -16,7 +16,12 @@ func (env *environment) eval(expr p.Expression) p.Expression {
 	switch ex := expr.(type) {
 
 	case *p.Variable:
-		return env.find(ex.Val)
+		if res := env.find(ex.Val); res != nil {
+			return res
+		}
+
+		fmt.Printf("DEBUG: Unbound variable: %q\n", ex.String())
+		return nil // TODO:
 
 	case *p.Symbol:
 		return ex
@@ -47,7 +52,7 @@ func (env *environment) eval(expr p.Expression) p.Expression {
 			switch v.Val {
 			case "define":
 				return env.evalDefine(ex)
-				//lambda, if, cond, apply, map, quote, begin, .. ?
+				//lambda, cond, apply, map, quote, begin, .. ?
 			case "if":
 				return env.evalIf(ex)
 			}
@@ -165,7 +170,6 @@ func (env *environment) find(val string) p.Expression {
 
 func (env *environment) evalDefine(lst *p.ExprList) p.Expression {
 	len := len(lst.Lst)
-
 	if len < 3 {
 		println("DEBUG: bad syntax: define needs at least 2 arguments")
 		return nil
@@ -470,6 +474,106 @@ func procExpt(args *p.ExprList) p.Expression {
 	return &p.Number{Val: math.Pow(num.Val, exp.Val)}
 }
 
+func procList(args *p.ExprList) p.Expression {
+	if len(args.Lst) == 0 {
+		return &p.NullSym
+	}
+
+	args.Lst = append(args.Lst, &p.NullSym)
+
+	return args
+}
+
+func procCons(args *p.ExprList) p.Expression {
+	if len(args.Lst) != 2 {
+		fmt.Printf("DEBUG: arity mismatch, expected 2\n")
+		return nil // TODO:
+	}
+
+	resLst := args.Lst[0:2]
+	if secArg, isLst := args.Lst[1].(*p.ExprList); isLst && secArg.Qlevel <= 1 {
+		resLst = append(args.Lst[0:1], secArg.Lst...)
+	}
+
+	return &p.ExprList{Lst: resLst, Qlevel: 1}
+}
+
+func procCar(args *p.ExprList) p.Expression {
+	if len(args.Lst) != 1 {
+		fmt.Printf("DEBUG: arity mismatch, expected 1\n")
+		return nil // TODO:
+	}
+
+	arg := args.Lst[0]
+	if lstArg, isLst := arg.(*p.ExprList); isLst {
+		return lstArg.Lst[0]
+	}
+
+	fmt.Printf("DEBUG: Contract vialotion, expected pair?, got %q\n", arg.String())
+	return nil
+}
+
+func procCdr(args *p.ExprList) p.Expression {
+	if len(args.Lst) != 1 {
+		fmt.Printf("DEBUG: arity mismatch, expected 1\n")
+		return nil // TODO:
+	}
+
+	arg := args.Lst[0]
+	if pairArg, isPair := isPair(arg); isPair {
+		if len(pairArg.Lst) == 2 {
+			return pairArg.Lst[1]
+		}
+
+		return &p.ExprList{Lst: pairArg.Lst[1:], Qlevel: pairArg.Qlevel}
+	}
+
+	fmt.Printf("DEBUG: Contract vialotion, expected pair?, got %q\n", arg.String())
+	return nil
+}
+
+func isPair(arg p.Expression) (pair *p.ExprList, isPair bool) {
+	if pair, isPair := arg.(*p.ExprList); isPair && len(pair.Lst) >= 2 {
+		return pair, isPair
+	}
+
+	return nil, false
+}
+
+func procIsList(args *p.ExprList) p.Expression {
+	if len(args.Lst) != 1 {
+		fmt.Printf("DEBUG: arity mismatch, expected 1\n")
+		return nil // TODO:
+	}
+
+	arg := args.Lst[0]
+	if p.IsNullSym(arg) {
+		return &p.TrueSym
+	}
+
+	if lst, isList := arg.(*p.ExprList); isList {
+		len := len(lst.Lst)
+		if len == 0 || p.IsNullSym(lst.Lst[len-1]) {
+			return &p.TrueSym
+		}
+	}
+
+	return &p.FalseSym
+}
+
+func procIsPair(args *p.ExprList) p.Expression {
+	if len(args.Lst) != 1 {
+		fmt.Printf("DEBUG: arity mismatch, expected 1\n")
+		return nil // TODO:
+	}
+
+	if _, isPair := isPair(args.Lst[0]); isPair {
+		return &p.TrueSym
+	}
+
+	return &p.FalseSym
+}
+
 type interpreter struct {
 	genv environment
 }
@@ -495,7 +599,13 @@ func (i *interpreter) addDefaultDefs() *interpreter {
 		"remainder": &p.Procedure{Fn: procRemainder},
 		"quotient":  &p.Procedure{Fn: procQuotient},
 		"expt":      &p.Procedure{Fn: procExpt},
-		// TODO: list, cons, car, cdr, pair?, list?, string?, display
+		"list":      &p.Procedure{Fn: procList},
+		"cons":      &p.Procedure{Fn: procCons},
+		"car":       &p.Procedure{Fn: procCar},
+		"cdr":       &p.Procedure{Fn: procCdr},
+		"pair?":     &p.Procedure{Fn: procIsPair},
+		"list?":     &p.Procedure{Fn: procIsList},
+		// TODO: string?, display
 	}
 
 	return i

@@ -44,12 +44,28 @@ type ExprList struct {
 }
 
 func (l *ExprList) String() string {
-	res := strings.Repeat("'", l.Qlevel) + "("
-	for i, expr := range l.Lst {
+	res := ""
+	if l.Qlevel > 0 {
+		res = strings.Repeat("'", l.Qlevel-1)
+	}
+
+	len := len(l.Lst)
+	if len == 0 {
+		return res + "()"
+	}
+
+	res += "("
+
+	for i, expr := range l.Lst[0 : len-1] {
 		if i != 0 {
 			res += " "
 		}
 		res += expr.String()
+	}
+
+	lastExpr := l.Lst[len-1]
+	if !IsNullSym(lastExpr) {
+		res += " . " + lastExpr.String()
 	}
 
 	return res + ")"
@@ -210,6 +226,10 @@ func (p *Parser) next(qlevel int) Expression {
 			if isSpec && s.Val == "exit" {
 				return &SpecialExpr{typ: SpecialExit}
 			}
+		}
+
+		if res.Qlevel > 0 {
+			res.Lst = append(res.Lst, &NullSym)
 		}
 
 		return &res
