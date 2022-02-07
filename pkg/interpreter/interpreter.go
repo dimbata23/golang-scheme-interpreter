@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"fmt"
+	"io/ioutil"
 	"math"
 
 	p "github.com/dimbata23/golang-scheme-interpreter/pkg/parser"
@@ -30,7 +31,7 @@ func (env *environment) eval(expr p.Expression) p.Expression {
 		return ex
 
 	case *p.Procedure:
-		panic("unimplemented")
+		panic("unreachable")
 		//return env.evalProcLambda(ex)
 
 	case *p.ExprList:
@@ -52,9 +53,11 @@ func (env *environment) eval(expr p.Expression) p.Expression {
 			switch v.Val {
 			case "define":
 				return env.evalDefine(ex)
-				//lambda, cond, apply, map, quote, begin, .. ?
 			case "if":
 				return env.evalIf(ex)
+			case "load":
+				return env.evalLoad(ex)
+				//lambda, cond, apply, map, quote, begin, .. ?
 			}
 		}
 
@@ -82,14 +85,14 @@ func makeEnvironment(parent *environment, params *p.ExprList, args *p.ExprList) 
 }
 
 func (env *environment) evalIf(lst *p.ExprList) p.Expression {
-	cond := env.eval(lst.Lst[1])
-	if cond == nil {
-		fmt.Printf("DEBUG: unknown %q\n", lst.Lst[1].String())
+	if len(lst.Lst) < 3 || len(lst.Lst) > 4 {
+		fmt.Printf("DEBUG: bad syntax: if expects 2 or 3 arguments\n")
 		return nil // TODO: err?
 	}
 
-	if len(lst.Lst) < 3 || len(lst.Lst) > 4 {
-		fmt.Printf("DEBUG: bad syntax: if expects 2 or 3 arguments\n")
+	cond := env.eval(lst.Lst[1])
+	if cond == nil {
+		fmt.Printf("DEBUG: unknown %q\n", lst.Lst[1].String())
 		return nil // TODO: err?
 	}
 
@@ -104,6 +107,43 @@ func (env *environment) evalIf(lst *p.ExprList) p.Expression {
 
 	// true case
 	return env.eval(lst.Lst[2])
+}
+
+func (env *environment) evalLoad(lst *p.ExprList) p.Expression {
+	if len(lst.Lst) != 2 {
+		fmt.Printf("DEBUG: bad syntax: load expects 1 argument\n")
+		return nil // TODO: err?
+	}
+
+	arg := lst.Lst[1]
+	if fileName, isVar := arg.(*p.Variable); isVar {
+		input, err := ioutil.ReadFile(fileName.Val)
+		if err != nil {
+			fmt.Printf("DEBUG: there was an error loading the file %q\n", fileName.Val)
+			return nil
+		}
+
+		var res p.Expression = nil
+		par := p.Parse(string(input))
+		for {
+			expr := par.Next()
+			if expr == nil {
+				break // parser has finished
+			}
+
+			if e, isErr := expr.(*p.Error); isErr {
+				res = e
+			} else {
+				res = env.eval(expr)
+			}
+
+			if res != nil {
+				println(res.String())
+			}
+		}
+	}
+
+	return nil // TODO: void?
 }
 
 func (env *environment) evalProcLambda(lst *p.ExprList) p.Expression {
@@ -574,6 +614,54 @@ func procIsPair(args *p.ExprList) p.Expression {
 	return &p.FalseSym
 }
 
+func minMax(args *p.ExprList) (min *p.Number, max *p.Number) {
+	if len(args.Lst) == 0 {
+		fmt.Printf("DEBUG: arity mismatch, expected at least 1\n")
+		return nil, nil // TODO:
+	}
+
+	max, isNum := args.Lst[0].(*p.Number)
+	min, _ = args.Lst[0].(*p.Number)
+	if !isNum {
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String())
+		return nil, nil // TODO:
+	}
+
+	for _, expr := range args.Lst[1:] {
+		if curr, isNum := expr.(*p.Number); isNum {
+			if curr.Val > max.Val {
+				max = curr
+			}
+			if curr.Val < min.Val {
+				min = curr
+			}
+		} else {
+			fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", expr.String())
+			return nil, nil // TODO:
+		}
+	}
+
+	return min, max
+}
+
+func procMax(args *p.ExprList) p.Expression {
+	_, max := minMax(args)
+	if max == nil {
+		return nil // because interfaces can have a type with a nil value... (:
+	}
+
+	return max // why golang... why...
+}
+
+func procMin(args *p.ExprList) p.Expression {
+	min, _ := minMax(args)
+	if min == nil {
+		return nil // because interfaces can have a type with a nil value... (:
+	}
+
+	return min // why golang... why...
+}
+
 type interpreter struct {
 	genv environment
 }
@@ -605,6 +693,8 @@ func (i *interpreter) addDefaultDefs() *interpreter {
 		"cdr":       &p.Procedure{Fn: procCdr},
 		"pair?":     &p.Procedure{Fn: procIsPair},
 		"list?":     &p.Procedure{Fn: procIsList},
+		"max":       &p.Procedure{Fn: procMax},
+		"min":       &p.Procedure{Fn: procMin},
 		// TODO: string?, display
 	}
 
@@ -652,10 +742,7 @@ func (i *interpreter) Interpret(input string) Status {
 			res = i.genv.eval(expr)
 		}
 
-		if res == nil {
-			//println("DEBUG: Got nil after evaluating")
-			//intstat = StatusError
-		} else {
+		if res != nil {
 			println(res.String())
 		}
 	}
