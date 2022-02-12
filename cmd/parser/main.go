@@ -13,12 +13,16 @@ func main() {
 		p := parser.Parse(string(str))
 		fmt.Println("Parsing...")
 		for {
-			expr := p.Next()
+			expr, err := p.Next()
 			if expr == nil {
 				break
 			}
 
-			fmt.Println(expr)
+			if err != nil {
+				fmt.Println(err.String())
+			} else {
+				fmt.Println(expr.String(0))
+			}
 		}
 		fmt.Println("Done.")
 	} else {
