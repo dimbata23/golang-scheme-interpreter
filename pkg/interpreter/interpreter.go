@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math"
+	"strconv"
 
 	p "github.com/dimbata23/golang-scheme-interpreter/pkg/parser"
 )
@@ -13,35 +14,114 @@ type environment struct {
 	parent *environment
 }
 
-func (env *environment) eval(expr p.Expression) p.Expression {
+type ErrorType int
+
+const (
+	ErrUnknown ErrorType = iota
+	ErrUnboundIdentifier
+	ErrMissingProc
+	ErrBadSyntax
+	ErrCouldntEval
+	ErrCouldntLoadFile
+	ErrNotAProc
+	ErrArityMismatch
+	ErrContractViolation
+)
+
+func newError(typ ErrorType, args ...string) (err *p.Error) {
+	len := len(args)
+	err = &p.Error{}
+
+	switch typ {
+	case ErrUnknown:
+		err.Val = "an unknown error occured"
+
+	case ErrUnboundIdentifier:
+		err.Val = "unbound identifier"
+		if len > 0 {
+			err.Val = fmt.Sprintf("%s: %s", args[0], err.Val)
+		}
+
+	case ErrMissingProc:
+		err.Val = "#%app: missing procedure expression;\n probably originally (), which is an illegal empty application"
+
+	case ErrBadSyntax:
+		err.Val = "bad syntax"
+		if len >= 1 {
+			err.Val = fmt.Sprintf("%s: %s", args[0], err.Val)
+		}
+
+	case ErrCouldntEval:
+		err.Val = "couldn't evaluate"
+		if len >= 1 {
+			err.Val = fmt.Sprintf("%s: %s", args[0], err.Val)
+		}
+
+	case ErrCouldntLoadFile:
+		err.Val = "load: couldn't load file"
+		if len >= 1 {
+			err.Val = fmt.Sprintf("%s\n %s", err.Val, args[0])
+		}
+
+		if len >= 2 {
+			err.Val = fmt.Sprintf("%s\n  %s", err.Val, args[1])
+		}
+
+	case ErrNotAProc:
+		err.Val = "application: not a procedure;\n expected a procedure that can be applied to arguments"
+		if len >= 1 {
+			err.Val = fmt.Sprintf("%s\n  given: %s", args[0])
+		}
+
+	case ErrArityMismatch:
+		err.Val = "arity mismatch;\n the expected number of arguments does not match the given number"
+		if len >= 1 {
+			err.Val = fmt.Sprintf("%s: %s", args[0], err.Val)
+		}
+
+	case ErrContractViolation:
+		err.Val = "contract violation"
+		if len >= 1 {
+			err.Val = fmt.Sprintf("%s: %s", args[0], err.Val)
+		}
+
+	default:
+		err.Val = "wrong error type"
+	}
+
+	if len >= 2 {
+		err.Val = fmt.Sprintf("%s\n  expected: %s", err.Val, args[1])
+	}
+
+	if len >= 3 {
+		err.Val = fmt.Sprintf("%s\n  given: %s", err.Val, args[2])
+	}
+
+	return err
+}
+
+func (env *environment) eval(expr p.Expression) (ex p.Expression, err *p.Error) {
 	switch ex := expr.(type) {
 
 	case *p.Variable:
-		if res := env.find(ex.Val); res != nil {
-			return res
-		}
-
-		fmt.Printf("DEBUG: Unbound variable: %q\n", ex.String(0))
-		return nil // TODO:
+		return env.find(ex.Val)
 
 	case *p.Symbol:
-		return ex
+		return ex, nil
 
 	case *p.Number:
-		return ex
+		return ex, nil
 
 	case *p.Procedure:
 		panic("unreachable")
-		//return env.evalProcLambda(ex)
 
 	case *p.ExprList:
 		if ex.Qlevel > 0 {
-			return ex
+			return ex, nil
 		}
 
 		if len(ex.Lst) == 0 {
-			println("DEBUG: Missing procedure")
-			return nil // TODO: return an error with the msg?
+			return &p.VoidExpr, newError(ErrMissingProc)
 		}
 
 		if len(ex.Lst) == 1 && p.IsNullSym(ex.Lst[0]) {
@@ -57,15 +137,15 @@ func (env *environment) eval(expr p.Expression) p.Expression {
 				return env.evalIf(ex)
 			case "load":
 				return env.evalLoad(ex)
-				//lambda, cond, apply, map, quote, begin, .. ?
+				// TODO: lambda, cond, apply, map, quote, begin, .. ?
 			}
 		}
 
-		// Non-special form
+		// lambda/procedure
 		return env.evalProcLambda(ex)
 
 	default:
-		return nil
+		return &p.VoidExpr, newError(ErrUnknown)
 
 	}
 }
@@ -84,145 +164,133 @@ func makeEnvironment(parent *environment, params *p.ExprList, args *p.ExprList) 
 	return resEnv
 }
 
-func (env *environment) evalIf(lst *p.ExprList) p.Expression {
-	if len(lst.Lst) < 3 || len(lst.Lst) > 4 {
-		fmt.Printf("DEBUG: bad syntax: if expects 2 or 3 arguments\n")
-		return nil // TODO: err?
+func (env *environment) evalIf(lst *p.ExprList) (ex p.Expression, err *p.Error) {
+	len := len(lst.Lst)
+	if len < 3 || len > 4 {
+		return &p.VoidExpr, newError(ErrBadSyntax, "if", "2 or 3 arguments", strconv.Itoa(len-1))
 	}
 
-	cond := env.eval(lst.Lst[1])
-	if cond == nil {
-		fmt.Printf("DEBUG: unknown %q\n", lst.Lst[1].String(0))
-		return nil // TODO: err?
+	cond, condErr := env.eval(lst.Lst[1])
+	if condErr != nil {
+		return &p.VoidExpr, condErr
 	}
 
 	if p.IsFalseSym(cond) {
 		// false case
-		if len(lst.Lst) == 4 {
+		if len == 4 {
 			return env.eval(lst.Lst[3])
 		}
 
-		return nil // TODO: void type
+		return &p.VoidExpr, nil
 	}
 
 	// true case
 	return env.eval(lst.Lst[2])
 }
 
-func (env *environment) evalLoad(lst *p.ExprList) p.Expression {
-	if len(lst.Lst) != 2 {
-		fmt.Printf("DEBUG: bad syntax: load expects 1 argument\n")
-		return nil // TODO: err?
+func (env *environment) evalLoad(lst *p.ExprList) (ex p.Expression, err *p.Error) {
+	len := len(lst.Lst)
+	if len != 2 {
+		return &p.VoidExpr, newError(ErrBadSyntax, "load", "1 argument", strconv.Itoa(len-1))
 	}
 
 	arg := lst.Lst[1]
 	if fileName, isVar := arg.(*p.Variable); isVar {
-		input, err := ioutil.ReadFile(fileName.Val)
-		if err != nil {
-			fmt.Printf("DEBUG: there was an error loading the file %q\n", fileName.Val)
-			return nil
+		input, ioerr := ioutil.ReadFile(fileName.Val)
+		if ioerr != nil {
+			return &p.VoidExpr, newError(ErrCouldntLoadFile, fileName.Val, ioerr.Error())
 		}
 
-		var res p.Expression = nil
 		par := p.Parse(string(input))
 		for {
-			expr := par.Next()
-			if expr == nil {
+			ex, err := par.Next()
+			if ex == nil {
 				break // parser has finished
 			}
 
-			if e, isErr := expr.(*p.Error); isErr {
-				res = e
-			} else {
-				res = env.eval(expr)
+			if err == nil {
+				ex, err = env.eval(ex)
 			}
 
-			if res != nil {
-				println(res.String(0))
+			if err != nil {
+				fmt.Println(err.String())
+			} else {
+				fmt.Println(ex.String(0))
 			}
 		}
 	}
 
-	return nil // TODO: void?
+	return &p.VoidExpr, nil
 }
 
-func (env *environment) evalProcLambda(lst *p.ExprList) p.Expression {
-	pr := env.eval(lst.Lst[0])
-	if pr == nil {
-		fmt.Printf("DEBUG: unknown %q\n", lst.Lst[0].String(0))
-		return nil // TODO: err?
+func (env *environment) evalProcLambda(lst *p.ExprList) (ex p.Expression, err *p.Error) {
+	pr, prErr := env.eval(lst.Lst[0])
+	if prErr != nil {
+		return &p.VoidExpr, prErr
 	}
 
 	proc, isProc := pr.(*p.Procedure)
 	lambda, isLambda := pr.(*p.Lambda)
 
 	if !isProc && !isLambda {
-		fmt.Printf("DEBUG: %q not a procedure\n", pr.String(0))
-		return nil // TODO:
+		return &p.VoidExpr, newError(ErrNotAProc, pr.String(0))
 	}
 
 	argsLen := len(lst.Lst[1:])
 	args := p.ExprList{Lst: make([]interface{ p.Expression }, argsLen)}
 
 	for i, arg := range lst.Lst[1:] {
-		args.Lst[i] = env.eval(arg) // TODO: concurency/parallelism
-		if args.Lst[i] == nil {
-			println("DEBUG: something broke while evaluating proc/lambda arguments")
-			return nil
+		args.Lst[i], err = env.eval(arg) // TODO: concurency/parallelism
+		if err != nil {
+			return &p.VoidExpr, err
 		}
 	}
 
 	if isProc {
-		return proc.Fn(&args)
+		ex, err = proc.Fn(&args)
 	} else if isLambda {
-		if len(lambda.Params.Lst) != len(args.Lst) {
-			println("DEBUG: arity mismatch")
-			return nil // TODO:
+		paramLen := len(lambda.Params.Lst)
+		argsLen := len(args.Lst)
+		if paramLen != argsLen {
+			return &p.VoidExpr, newError(ErrArityMismatch, lambda.Name, strconv.Itoa(paramLen), strconv.Itoa(argsLen))
 		}
 
-		var res p.Expression
 		lambdaEnv := makeEnvironment(env, lambda.Params, &args)
 		for _, expr := range lambda.Body.Lst {
-			res = lambdaEnv.eval(expr)
-			if res == nil {
-				println("DEBUG: something broke while evaluating lambda body")
-				return nil // TODO:
+			ex, err = lambdaEnv.eval(expr)
+			if err != nil {
+				break
 			}
 		}
-
-		return res
 	}
 
-	panic("unreachable")
+	return ex, err
 }
 
-func (env *environment) find(val string) p.Expression {
+func (env *environment) find(val string) (ex p.Expression, err *p.Error) {
 	if val, ok := env.vars[val]; ok {
-		return val
+		return val, nil
 	}
 
 	if env.parent != nil {
 		return env.parent.find(val)
 	}
 
-	return nil
+	return &p.VoidExpr, newError(ErrUnboundIdentifier, val)
 }
 
-func (env *environment) evalDefine(lst *p.ExprList) p.Expression {
+func (env *environment) evalDefine(lst *p.ExprList) (ex p.Expression, err *p.Error) {
 	len := len(lst.Lst)
 	if len < 3 {
-		println("DEBUG: bad syntax: define needs at least 2 arguments")
-		return nil
+		return &p.VoidExpr, newError(ErrBadSyntax, "define", "at least 2 arguments", strconv.Itoa(len-1))
 	}
 
 	if len > 3 {
 		if _, isLst := lst.Lst[1].(*p.ExprList); !isLst {
-			println("DEBUG: bad syntax: define expects exactly one expression after identifier")
-			return nil
+			return &p.VoidExpr, newError(ErrBadSyntax, "define", "exactly one expression after identifier")
 		}
 	}
 
-	var res p.Expression
 	var ident string
 
 	switch firstArg := lst.Lst[1].(type) {
@@ -231,56 +299,57 @@ func (env *environment) evalDefine(lst *p.ExprList) p.Expression {
 			ident = lambdaName.Val
 			params := p.ExprList{Lst: firstArg.Lst[1:]}
 			body := p.ExprList{Lst: lst.Lst[2:]}
-			res = &p.Lambda{Name: ident, Params: &params, Body: &body}
+			ex = &p.Lambda{Name: ident, Params: &params, Body: &body}
 		} else {
-			println("DEBUG: lambda definition name not of variable type")
-			return nil // TODO:
+			return &p.VoidExpr, newError(ErrBadSyntax, "define", "identifier", firstArg.Lst[0].String(0))
 		}
 
 	case *p.Variable: // Variable definition
 		ident = firstArg.Val
-		res = env.eval(lst.Lst[2])
+		ex, err = env.eval(lst.Lst[2])
 
 	default:
-		println("DEBUG: wrong argument type")
-		return nil // TODO:
+		return &p.VoidExpr, newError(ErrBadSyntax, "define", "identifier or list", lst.Lst[1].String(0))
 	}
 
-	env.vars[ident] = res
+	env.vars[ident] = ex
 
-	return res
+	return ex, nil
 }
 
-func procSubDiv(args *p.ExprList, isSub bool) p.Expression {
+func procSubDiv(args *p.ExprList, isSub bool) (ex p.Expression, err *p.Error) {
 	res := 0.0
 	if !isSub {
 		res = 1
 	}
 
 	if len(args.Lst) == 0 {
-		return &p.Number{Val: res}
+		return &p.Number{Val: res}, nil
+	}
+
+	procName := "/"
+	if isSub {
+		procName = "-"
 	}
 
 	fnum, isNum := args.Lst[0].(*p.Number)
 	if !isNum {
-		println("DEBUG: wrong argument type, only numbers expected")
-		return nil // TODO:
+		return &p.VoidExpr, newError(ErrContractViolation, procName, "number?", args.Lst[0].String(0))
 	}
 	res = fnum.Val
 
 	if len(args.Lst) == 1 {
 		if isSub {
-			return &p.Number{Val: -res}
+			return &p.Number{Val: -res}, nil
 		} else {
-			return &p.Number{Val: 1 / res}
+			return &p.Number{Val: 1 / res}, nil
 		}
 	}
 
 	for _, ex := range args.Lst[1:] {
 		num, isNum := ex.(*p.Number)
 		if !isNum {
-			println("DEBUG: wrong argument type, only numbers expected")
-			return nil // TODO:
+			return &p.VoidExpr, newError(ErrContractViolation, procName, "number?", args.Lst[0].String(0))
 		}
 		if isSub {
 			res -= num.Val
@@ -289,28 +358,32 @@ func procSubDiv(args *p.ExprList, isSub bool) p.Expression {
 		}
 	}
 
-	return &p.Number{Val: res}
+	return &p.Number{Val: res}, nil
 }
 
-func procSubtract(args *p.ExprList) p.Expression {
+func procSubtract(args *p.ExprList) (ex p.Expression, err *p.Error) {
 	return procSubDiv(args, true)
 }
 
-func procDivide(args *p.ExprList) p.Expression {
+func procDivide(args *p.ExprList) (ex p.Expression, err *p.Error) {
 	return procSubDiv(args, false)
 }
 
-func procAddMult(args *p.ExprList, isAdd bool) p.Expression {
+func procAddMult(args *p.ExprList, isAdd bool) (ex p.Expression, err *p.Error) {
 	res := 0.0
 	if !isAdd {
 		res = 1
 	}
 
+	procName := "*"
+	if isAdd {
+		procName = "+"
+	}
+
 	for _, ex := range args.Lst {
 		num, isNum := ex.(*p.Number)
 		if !isNum {
-			println("DEBUG: wrong argument type, only numbers expected")
-			return nil // TODO:
+			return &p.VoidExpr, newError(ErrContractViolation, procName, "number?", ex.String(0))
 		}
 
 		if isAdd {
@@ -320,43 +393,41 @@ func procAddMult(args *p.ExprList, isAdd bool) p.Expression {
 		}
 	}
 
-	return &p.Number{Val: res}
+	return &p.Number{Val: res}, nil
 }
 
-func procAdd(args *p.ExprList) p.Expression {
+func procAdd(args *p.ExprList) (ex p.Expression, err *p.Error) {
 	return procAddMult(args, true)
 }
 
-func procMultiply(args *p.ExprList) p.Expression {
+func procMultiply(args *p.ExprList) (ex p.Expression, err *p.Error) {
 	return procAddMult(args, false)
 }
 
-func procComp(args *p.ExprList, comp func(*p.Number, *p.Number) bool) p.Expression {
+func procComp(args *p.ExprList, comp func(*p.Number, *p.Number) bool) (ex p.Expression, err *p.Error) {
 	if len(args.Lst) == 0 {
-		return &p.TrueSym
+		return &p.TrueSym, nil
 	}
 
 	lastNum, isNum := args.Lst[0].(*p.Number)
 	if !isNum {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String(0))
-		return nil // TODO:
+		return &p.VoidExpr, newError(ErrContractViolation, "<comparison>", "number?", args.Lst[0].String(0))
 	}
 
 	for _, ex := range args.Lst[1:] {
 		num, isNum := ex.(*p.Number)
 		if !isNum {
-			fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String(0))
-			return nil // TODO:
+			return &p.VoidExpr, newError(ErrContractViolation, "<comparison>", "number?", ex.String(0))
 		}
 
 		if !comp(lastNum, num) {
-			return &p.FalseSym
+			return &p.FalseSym, nil
 		}
 
 		lastNum = num
 	}
 
-	return &p.TrueSym
+	return &p.TrueSym, nil
 }
 
 func less(lhs *p.Number, rhs *p.Number) bool {
@@ -379,155 +450,147 @@ func equal(lhs *p.Number, rhs *p.Number) bool {
 	return lhs.Val == rhs.Val
 }
 
-func procLess(args *p.ExprList) p.Expression {
+func procLess(args *p.ExprList) (ex p.Expression, err *p.Error) {
 	return procComp(args, less)
 }
 
-func procLessEq(args *p.ExprList) p.Expression {
+func procLessEq(args *p.ExprList) (ex p.Expression, err *p.Error) {
 	return procComp(args, lessEq)
 }
 
-func procGreater(args *p.ExprList) p.Expression {
+func procGreater(args *p.ExprList) (ex p.Expression, err *p.Error) {
 	return procComp(args, greater)
 }
 
-func procGreaterEq(args *p.ExprList) p.Expression {
+func procGreaterEq(args *p.ExprList) (ex p.Expression, err *p.Error) {
 	return procComp(args, greaterEq)
 }
 
-func procEquals(args *p.ExprList) p.Expression {
+func procEquals(args *p.ExprList) (ex p.Expression, err *p.Error) {
 	return procComp(args, equal)
 }
 
-func procIsNumber(args *p.ExprList) p.Expression {
-	if len(args.Lst) != 1 {
-		fmt.Printf("DEBUG: arity mismatch\n")
-		return nil // TODO:
+func procIsNumber(args *p.ExprList) (ex p.Expression, err *p.Error) {
+	len := len(args.Lst)
+	if len != 1 {
+		return &p.VoidExpr, newError(ErrArityMismatch, "number?", "1", strconv.Itoa(len))
 	}
 
 	if _, isNum := args.Lst[0].(*p.Number); isNum {
-		return &p.TrueSym
+		return &p.TrueSym, nil
 	}
 
-	return &p.FalseSym
+	return &p.FalseSym, nil
 }
 
-func procIsNull(args *p.ExprList) p.Expression {
-	if len(args.Lst) != 1 {
-		fmt.Printf("DEBUG: arity mismatch\n")
-		return nil // TODO:
+func procIsNull(args *p.ExprList) (ex p.Expression, err *p.Error) {
+	len := len(args.Lst)
+	if len != 1 {
+		return &p.VoidExpr, newError(ErrArityMismatch, "null?", "1", strconv.Itoa(len))
 	}
 
 	if p.IsNullSym(args.Lst[0]) {
-		return &p.TrueSym
+		return &p.TrueSym, nil
 	}
 
-	return &p.FalseSym
+	return &p.FalseSym, nil
 }
 
-func procAnd(args *p.ExprList) p.Expression {
+func procAnd(args *p.ExprList) (ex p.Expression, err *p.Error) {
 	res := p.Expression(&p.TrueSym)
 
 	for _, ex := range args.Lst {
 		if p.IsFalseSym(ex) {
-			return &p.FalseSym
+			return &p.FalseSym, nil
 		}
 
 		res = ex
 	}
 
-	return res
+	return res, nil
 }
 
-func procOr(args *p.ExprList) p.Expression {
-	res := p.Expression(&p.FalseSym)
-
+func procOr(args *p.ExprList) (ex p.Expression, err *p.Error) {
 	for _, ex := range args.Lst {
 		if !p.IsFalseSym(ex) {
-			return ex
+			return ex, nil
 		}
 	}
 
-	return res
+	return &p.FalseSym, nil
 }
 
-func procRemainder(args *p.ExprList) p.Expression {
-	if len(args.Lst) != 2 {
-		fmt.Printf("DEBUG: arity mismatch, expected 2\n")
-		return nil // TODO:
+func procRemainder(args *p.ExprList) (ex p.Expression, err *p.Error) {
+	len := len(args.Lst)
+	if len != 2 {
+		return &p.VoidExpr, newError(ErrArityMismatch, "remainder", "2", strconv.Itoa(len))
 	}
 
 	num, isNum := args.Lst[0].(*p.Number)
 	if !isNum {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String(0))
-		return nil // TODO:
+		return &p.VoidExpr, newError(ErrContractViolation, "remainder", "number?", args.Lst[0].String(0))
 	}
 
 	div, isNumDiv := args.Lst[1].(*p.Number)
 	if !isNumDiv {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[1].String(0))
-		return nil // TODO:
+		return &p.VoidExpr, newError(ErrContractViolation, "remainder", "number?", args.Lst[1].String(0))
 	}
 
-	return &p.Number{Val: float64(int64(num.Val) % int64(div.Val))}
+	return &p.Number{Val: float64(int64(num.Val) % int64(div.Val))}, nil
 }
 
-func procQuotient(args *p.ExprList) p.Expression {
-	if len(args.Lst) != 2 {
-		fmt.Printf("DEBUG: arity mismatch, expected 2\n")
-		return nil // TODO:
+func procQuotient(args *p.ExprList) (ex p.Expression, err *p.Error) {
+	len := len(args.Lst)
+	if len != 2 {
+		return &p.VoidExpr, newError(ErrArityMismatch, "quotient", "2", strconv.Itoa(len))
 	}
 
 	num, isNum := args.Lst[0].(*p.Number)
 	if !isNum {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String(0))
-		return nil // TODO:
+		return &p.VoidExpr, newError(ErrContractViolation, "quotient", "number?", args.Lst[0].String(0))
 	}
 
 	div, isNumDiv := args.Lst[1].(*p.Number)
 	if !isNumDiv {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[1].String(0))
-		return nil // TODO:
+		return &p.VoidExpr, newError(ErrContractViolation, "quotient", "number?", args.Lst[1].String(0))
 	}
 
-	return &p.Number{Val: float64(int64(num.Val) / int64(div.Val))}
+	return &p.Number{Val: float64(int64(num.Val) / int64(div.Val))}, nil
 }
 
-func procExpt(args *p.ExprList) p.Expression {
-	if len(args.Lst) != 2 {
-		fmt.Printf("DEBUG: arity mismatch, expected 2\n")
-		return nil // TODO:
+func procExpt(args *p.ExprList) (ex p.Expression, err *p.Error) {
+	len := len(args.Lst)
+	if len != 2 {
+		return &p.VoidExpr, newError(ErrArityMismatch, "expt", "2", strconv.Itoa(len))
 	}
 
 	num, isNum := args.Lst[0].(*p.Number)
 	if !isNum {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String(0))
-		return nil // TODO:
+		return &p.VoidExpr, newError(ErrContractViolation, "expt", "number?", args.Lst[0].String(0))
 	}
 
 	exp, isExpDiv := args.Lst[1].(*p.Number)
 	if !isExpDiv {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[1].String(0))
-		return nil // TODO:
+		return &p.VoidExpr, newError(ErrContractViolation, "expt", "number?", args.Lst[1].String(0))
 	}
 
-	return &p.Number{Val: math.Pow(num.Val, exp.Val)}
+	return &p.Number{Val: math.Pow(num.Val, exp.Val)}, nil
 }
 
-func procList(args *p.ExprList) p.Expression {
+func procList(args *p.ExprList) (ex p.Expression, err *p.Error) {
 	if len(args.Lst) == 0 {
-		return &p.NullSym
+		return &p.NullSym, nil
 	}
 
 	args.Lst = append(args.Lst, &p.NullSym)
 
-	return args
+	return args, nil
 }
 
-func procCons(args *p.ExprList) p.Expression {
-	if len(args.Lst) != 2 {
-		fmt.Printf("DEBUG: arity mismatch, expected 2\n")
-		return nil // TODO:
+func procCons(args *p.ExprList) (ex p.Expression, err *p.Error) {
+	len := len(args.Lst)
+	if len != 2 {
+		return &p.VoidExpr, newError(ErrArityMismatch, "cons", "2", strconv.Itoa(len))
 	}
 
 	resLst := args.Lst[0:2]
@@ -535,41 +598,39 @@ func procCons(args *p.ExprList) p.Expression {
 		resLst = append(args.Lst[0:1], secArg.Lst...)
 	}
 
-	return &p.ExprList{Lst: resLst, Qlevel: 1}
+	return &p.ExprList{Lst: resLst, Qlevel: 1}, nil
 }
 
-func procCar(args *p.ExprList) p.Expression {
-	if len(args.Lst) != 1 {
-		fmt.Printf("DEBUG: arity mismatch, expected 1\n")
-		return nil // TODO:
+func procCar(args *p.ExprList) (ex p.Expression, err *p.Error) {
+	len := len(args.Lst)
+	if len != 1 {
+		return &p.VoidExpr, newError(ErrArityMismatch, "car", "1", strconv.Itoa(len))
 	}
 
 	arg := args.Lst[0]
 	if lstArg, isLst := arg.(*p.ExprList); isLst {
-		return lstArg.Lst[0]
+		return lstArg.Lst[0], nil
 	}
 
-	fmt.Printf("DEBUG: Contract vialotion, expected pair?, got %q\n", arg.String(0))
-	return nil
+	return &p.VoidExpr, newError(ErrContractViolation, "car", "pair?", arg.String(0))
 }
 
-func procCdr(args *p.ExprList) p.Expression {
-	if len(args.Lst) != 1 {
-		fmt.Printf("DEBUG: arity mismatch, expected 1\n")
-		return nil // TODO:
+func procCdr(args *p.ExprList) (ex p.Expression, err *p.Error) {
+	len := len(args.Lst)
+	if len != 1 {
+		return &p.VoidExpr, newError(ErrArityMismatch, "cdr", "1", strconv.Itoa(len))
 	}
 
 	arg := args.Lst[0]
 	if pairArg, isPair := isPair(arg); isPair {
-		if len(pairArg.Lst) == 2 {
-			return pairArg.Lst[1]
+		if len == 2 {
+			return pairArg.Lst[1], nil
 		}
 
-		return &p.ExprList{Lst: pairArg.Lst[1:], Qlevel: pairArg.Qlevel}
+		return &p.ExprList{Lst: pairArg.Lst[1:], Qlevel: pairArg.Qlevel}, nil
 	}
 
-	fmt.Printf("DEBUG: Contract vialotion, expected pair?, got %q\n", arg.String(0))
-	return nil
+	return &p.VoidExpr, newError(ErrContractViolation, "car", "pair?", arg.String(0))
 }
 
 func isPair(arg p.Expression) (pair *p.ExprList, isPair bool) {
@@ -580,51 +641,50 @@ func isPair(arg p.Expression) (pair *p.ExprList, isPair bool) {
 	return nil, false
 }
 
-func procIsList(args *p.ExprList) p.Expression {
-	if len(args.Lst) != 1 {
-		fmt.Printf("DEBUG: arity mismatch, expected 1\n")
-		return nil // TODO:
+func procIsList(args *p.ExprList) (ex p.Expression, err *p.Error) {
+	argsLen := len(args.Lst)
+	if argsLen != 1 {
+		return &p.VoidExpr, newError(ErrArityMismatch, "list?", "1", strconv.Itoa(argsLen))
 	}
 
 	arg := args.Lst[0]
 	if p.IsNullSym(arg) {
-		return &p.TrueSym
+		return &p.TrueSym, nil
 	}
 
 	if lst, isList := arg.(*p.ExprList); isList {
 		len := len(lst.Lst)
 		if len == 0 || p.IsNullSym(lst.Lst[len-1]) {
-			return &p.TrueSym
+			return &p.TrueSym, nil
 		}
 	}
 
-	return &p.FalseSym
+	return &p.FalseSym, nil
 }
 
-func procIsPair(args *p.ExprList) p.Expression {
-	if len(args.Lst) != 1 {
-		fmt.Printf("DEBUG: arity mismatch, expected 1\n")
-		return nil // TODO:
+func procIsPair(args *p.ExprList) (ex p.Expression, err *p.Error) {
+	argsLen := len(args.Lst)
+	if argsLen != 1 {
+		return &p.VoidExpr, newError(ErrArityMismatch, "pair?", "1", strconv.Itoa(argsLen))
 	}
 
 	if _, isPair := isPair(args.Lst[0]); isPair {
-		return &p.TrueSym
+		return &p.TrueSym, nil
 	}
 
-	return &p.FalseSym
+	return &p.FalseSym, nil
 }
 
-func minMax(args *p.ExprList) (min *p.Number, max *p.Number) {
-	if len(args.Lst) == 0 {
-		fmt.Printf("DEBUG: arity mismatch, expected at least 1\n")
-		return nil, nil // TODO:
+func minMax(args *p.ExprList) (min *p.Number, max *p.Number, err *p.Error) {
+	argsLen := len(args.Lst)
+	if argsLen == 0 {
+		return nil, nil, newError(ErrArityMismatch, "min/max", "1", strconv.Itoa(argsLen))
 	}
 
 	max, isNum := args.Lst[0].(*p.Number)
 	min, _ = args.Lst[0].(*p.Number)
 	if !isNum {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String(0))
-		return nil, nil // TODO:
+		return nil, nil, newError(ErrContractViolation, "min/max", "number?", args.Lst[0].String(0))
 	}
 
 	for _, expr := range args.Lst[1:] {
@@ -636,30 +696,29 @@ func minMax(args *p.ExprList) (min *p.Number, max *p.Number) {
 				min = curr
 			}
 		} else {
-			fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", expr.String(0))
-			return nil, nil // TODO:
+			return nil, nil, newError(ErrContractViolation, "min/max", "number?", expr.String(0))
 		}
 	}
 
-	return min, max
+	return min, max, nil
 }
 
-func procMax(args *p.ExprList) p.Expression {
-	_, max := minMax(args)
-	if max == nil {
-		return nil // because interfaces can have a type with a nil value... (:
+func procMax(args *p.ExprList) (ex p.Expression, err *p.Error) {
+	_, max, err := minMax(args)
+	if err != nil {
+		return &p.VoidExpr, err
 	}
 
-	return max // why golang... why...
+	return max, nil
 }
 
-func procMin(args *p.ExprList) p.Expression {
-	min, _ := minMax(args)
-	if min == nil {
-		return nil // because interfaces can have a type with a nil value... (:
+func procMin(args *p.ExprList) (ex p.Expression, err *p.Error) {
+	min, _, err := minMax(args)
+	if err != nil {
+		return &p.VoidExpr, err
 	}
 
-	return min // why golang... why...
+	return min, nil
 }
 
 type interpreter struct {
@@ -695,7 +754,6 @@ func (i *interpreter) addDefaultDefs() *interpreter {
 		"list?":     &p.Procedure{Fn: procIsList},
 		"max":       &p.Procedure{Fn: procMax},
 		"min":       &p.Procedure{Fn: procMin},
-		// TODO: string?, display
 	}
 
 	return i
@@ -723,27 +781,24 @@ func (i *interpreter) Interpret(input string) Status {
 	par := p.Parse(input)
 
 	for {
-		expr := par.Next()
+		expr, err := par.Next()
 		if expr == nil {
-			//println("DEBUG: Got nil after parsing. Should appear when the Interpret() finishes.")
-			//intstat = StatusOk
-			break
+			break // parser has finished
 		}
 
 		if p.IsSpecialExit(expr) {
-			println("DEBUG: Got (exit), bye!")
+			fmt.Println("Got (exit), bye!")
 			return StatusExitted
 		}
 
-		var res p.Expression
-		if e, isErr := expr.(*p.Error); isErr {
-			res = e
-		} else {
-			res = i.genv.eval(expr)
+		if err == nil {
+			expr, err = i.genv.eval(expr)
 		}
 
-		if res != nil {
-			println(res.String(0))
+		if err != nil {
+			fmt.Println(err.String())
+		} else {
+			fmt.Println(expr.String(0))
 		}
 	}
 

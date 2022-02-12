@@ -13,11 +13,11 @@ type Expression interface {
 }
 
 type Error struct {
-	val string
+	Val string
 }
 
-func (e *Error) String(qlevel int) string {
-	return e.val
+func (e *Error) String() string {
+	return e.Val
 }
 
 type Number struct {
@@ -77,7 +77,7 @@ func (l *ExprList) String(qlevel int) string {
 }
 
 type Procedure struct {
-	Fn func(*ExprList) Expression
+	Fn func(*ExprList) (Expression, *Error)
 }
 
 func (proc *Procedure) String(_ int) string {
@@ -149,6 +149,14 @@ func (s *SpecialExpr) String(_ int) string {
 	return "Unknown special expression"
 }
 
+var VoidExpr voidExpr = voidExpr{}
+
+type voidExpr struct{}
+
+func (ve *voidExpr) String(_ int) string {
+	return "#<void>"
+}
+
 func IsSpecialExit(e Expression) bool {
 	s, isSpec := e.(*SpecialExpr)
 	return isSpec && s.typ == SpecialExit
@@ -164,37 +172,37 @@ func Parse(input string) *Parser {
 	}
 }
 
-func (p *Parser) Next() Expression {
+func (p *Parser) Next() (ex Expression, err *Error) {
 	return p.next(0)
 }
 
-func (p *Parser) next(qlevel int) Expression {
+func (p *Parser) next(qlevel int) (ex Expression, err *Error) {
 	token := p.lexer.NextToken()
 	if token == nil {
-		return nil
+		return nil, nil
 	}
 
 	switch token.Typ {
 
 	case lexer.TokenError:
-		return &Error{val: token.Val}
+		return &VoidExpr, &Error{Val: token.Val}
 
 	case lexer.TokenEOF:
-		return nil
+		return nil, nil
 
 	case lexer.TokenNumber:
 		num, err := strconv.ParseFloat(token.Val, 64)
 		if err != nil {
-			return &Error{val: err.Error()}
+			return &VoidExpr, &Error{Val: err.Error()}
 		}
-		return &Number{Val: num, qlevel: qlevel}
+		return &Number{Val: num, qlevel: qlevel}, nil
 
 	case lexer.TokenIdentifier:
 		if qlevel == 0 {
-			return &Variable{Val: token.Val}
+			return &Variable{Val: token.Val}, nil
 		}
 
-		return &Symbol{val: token.Val, qlevel: qlevel}
+		return &Symbol{val: token.Val, qlevel: qlevel}, nil
 
 	case lexer.TokenString:
 		panic("not implemented")
@@ -203,11 +211,9 @@ func (p *Parser) next(qlevel int) Expression {
 		res := ExprList{Lst: make([]interface{ Expression }, 0), Qlevel: qlevel}
 
 		for {
-			inexpr := p.next(qlevel)
-
-			e, isErr := inexpr.(*Error)
-			if isErr {
-				return e
+			inexpr, err := p.next(qlevel)
+			if err != nil {
+				return &VoidExpr, err
 			}
 
 			s, isSpec := inexpr.(*SpecialExpr)
@@ -216,20 +222,20 @@ func (p *Parser) next(qlevel int) Expression {
 			}
 
 			if inexpr == nil {
-				return &Error{val: "Unexpected end of file: expected a `)` to close `(`"}
+				return &VoidExpr, &Error{Val: "read-syntax: expected a `)` to close `(`"}
 			}
 
 			res.Lst = append(res.Lst, inexpr)
 		}
 
 		if len(res.Lst) == 0 && res.Qlevel == 1 {
-			return &NullSym
+			return &NullSym, nil
 		}
 
 		if len(res.Lst) == 1 && res.Qlevel == 0 {
 			s, isSpec := res.Lst[0].(*Variable)
 			if isSpec && s.Val == "exit" {
-				return &SpecialExpr{typ: SpecialExit}
+				return &SpecialExpr{typ: SpecialExit}, nil
 			}
 		}
 
@@ -237,20 +243,20 @@ func (p *Parser) next(qlevel int) Expression {
 			res.Lst = append(res.Lst, &NullSym)
 		}
 
-		return &res
+		return &res, nil
 
 	case lexer.TokenCloseBracket:
-		return &SpecialExpr{typ: SpecialCloseBracket}
+		return &SpecialExpr{typ: SpecialCloseBracket}, nil
 
 	case lexer.TokenQuote:
 		return p.next(qlevel + 1)
 
 	case lexer.TokenSkip:
-		panic("Supposedly unreachable code?")
+		panic("supposedly unreachable code?")
 
 	case lexer.TokenOutsideBrackets:
 		return p.next(qlevel) // skip anything outside brackets
 	}
 
-	return &Error{val: "Unknown lexed type"}
+	return &VoidExpr, &Error{Val: "read-syntax: unknown lex type"}
 }

@@ -165,28 +165,6 @@ func (l *Lexer) NextToken() *Token {
 
 /// State functions
 
-// func lexOutsideList(l *Lexer) stateFn {
-// 	for {
-// 		if strings.HasPrefix(l.input[l.pos:], "(") {
-// 			if l.pos > l.start {
-// 				l.emit(TokenOutsideBrackets)
-// 			}
-// 			return lexOpenBracket
-// 		}
-// 		if l.next() == eof {
-// 			break
-// 		}
-// 	}
-
-// 	if l.pos > l.start {
-// 		l.emit(TokenOutsideBrackets)
-// 	}
-
-// 	l.emit(TokenEOF)
-
-// 	return nil
-// }
-
 func lexOpenBracket(l *Lexer) stateFn {
 	l.pos++
 	l.level++
