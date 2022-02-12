@@ -223,11 +223,8 @@ func lexGeneral(l *Lexer) stateFn {
 		case r == '+' || r == '-' || r == '.' || r >= '0' && r <= '9':
 			l.backup()
 			return lexNumber
-		//case unicode.IsLetter(r):
 
-		// TODO:
 		default:
-			//l.backup()
 			return lexIdentifier
 		}
 	}
@@ -301,7 +298,6 @@ func lexIdentifier(l *Lexer) stateFn {
 		case r == eof:
 			return l.errorf("unexpected end of file: expected `)` to close `(`")
 
-		// TODO: change
 		case unicode.IsSpace(r) || r == ')':
 			l.backup()
 			l.emit(TokenIdentifier)

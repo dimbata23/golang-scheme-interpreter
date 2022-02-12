@@ -9,14 +9,14 @@ import (
 )
 
 type Expression interface {
-	String() string // TODO: Add support of qlevels
+	String(qlevel int) string
 }
 
 type Error struct {
 	val string
 }
 
-func (e *Error) String() string {
+func (e *Error) String(qlevel int) string {
 	return e.val
 }
 
@@ -25,16 +25,24 @@ type Number struct {
 	qlevel int
 }
 
-func (n *Number) String() string {
-	return fmt.Sprintf("%f", n.Val)
+func getQs(exQLevel int, currQLevel int) string {
+	qs := ""
+	if exQLevel > currQLevel {
+		qs = strings.Repeat("'", exQLevel-currQLevel)
+	}
+
+	return qs
+}
+
+func (n *Number) String(qlevel int) string {
+	return getQs(n.qlevel, qlevel+1) + strconv.FormatFloat(n.Val, 'f', -1, 64)
 }
 
 type Variable struct {
 	Val string
 }
 
-func (v *Variable) String() string {
-	//panic("not implemented")
+func (v *Variable) String(_ int) string {
 	return v.Val
 }
 
@@ -43,11 +51,8 @@ type ExprList struct {
 	Qlevel int
 }
 
-func (l *ExprList) String() string {
-	res := ""
-	if l.Qlevel > 0 {
-		res = strings.Repeat("'", l.Qlevel-1)
-	}
+func (l *ExprList) String(qlevel int) string {
+	res := getQs(l.Qlevel, qlevel)
 
 	len := len(l.Lst)
 	if len == 0 {
@@ -60,12 +65,12 @@ func (l *ExprList) String() string {
 		if i != 0 {
 			res += " "
 		}
-		res += expr.String()
+		res += expr.String(l.Qlevel + 1)
 	}
 
 	lastExpr := l.Lst[len-1]
 	if !IsNullSym(lastExpr) {
-		res += " . " + lastExpr.String()
+		res += " . " + lastExpr.String(l.Qlevel+1)
 	}
 
 	return res + ")"
@@ -75,7 +80,7 @@ type Procedure struct {
 	Fn func(*ExprList) Expression
 }
 
-func (proc *Procedure) String() string {
+func (proc *Procedure) String(_ int) string {
 	return "#<procedure>"
 }
 
@@ -85,7 +90,7 @@ type Lambda struct {
 	Body   *ExprList
 }
 
-func (lambda *Lambda) String() string {
+func (lambda *Lambda) String(_ int) string {
 	return fmt.Sprintf("#<lambda %s>", lambda.Name)
 }
 
@@ -114,12 +119,12 @@ func IsFalseSym(expr Expression) bool {
 	return false
 }
 
-func (s *Symbol) String() string {
+func (s *Symbol) String(qlevel int) string {
 	qs := s.qlevel
-	if *s == FalseSym || *s == TrueSym {
+	if len(s.val) > 0 && s.val[0] == '#' {
 		qs -= 1
 	}
-	return strings.Repeat("'", qs) + s.val
+	return getQs(qs, qlevel) + s.val
 }
 
 type SpecialType int
@@ -133,7 +138,7 @@ type SpecialExpr struct {
 	typ SpecialType
 }
 
-func (s *SpecialExpr) String() string {
+func (s *SpecialExpr) String(_ int) string {
 	switch s.typ {
 	case SpecialExit:
 		return "(exit)"

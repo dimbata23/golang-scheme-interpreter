@@ -21,7 +21,7 @@ func (env *environment) eval(expr p.Expression) p.Expression {
 			return res
 		}
 
-		fmt.Printf("DEBUG: Unbound variable: %q\n", ex.String())
+		fmt.Printf("DEBUG: Unbound variable: %q\n", ex.String(0))
 		return nil // TODO:
 
 	case *p.Symbol:
@@ -77,7 +77,7 @@ func makeEnvironment(parent *environment, params *p.ExprList, args *p.ExprList) 
 		if vp, isVar := param.(*p.Variable); isVar {
 			resEnv.vars[vp.Val] = args.Lst[i]
 		} else {
-			fmt.Printf("DEBUG: non-variable param given %q\n", param.String())
+			fmt.Printf("DEBUG: non-variable param given %q\n", param.String(0))
 		}
 	}
 
@@ -92,7 +92,7 @@ func (env *environment) evalIf(lst *p.ExprList) p.Expression {
 
 	cond := env.eval(lst.Lst[1])
 	if cond == nil {
-		fmt.Printf("DEBUG: unknown %q\n", lst.Lst[1].String())
+		fmt.Printf("DEBUG: unknown %q\n", lst.Lst[1].String(0))
 		return nil // TODO: err?
 	}
 
@@ -138,7 +138,7 @@ func (env *environment) evalLoad(lst *p.ExprList) p.Expression {
 			}
 
 			if res != nil {
-				println(res.String())
+				println(res.String(0))
 			}
 		}
 	}
@@ -149,7 +149,7 @@ func (env *environment) evalLoad(lst *p.ExprList) p.Expression {
 func (env *environment) evalProcLambda(lst *p.ExprList) p.Expression {
 	pr := env.eval(lst.Lst[0])
 	if pr == nil {
-		fmt.Printf("DEBUG: unknown %q\n", lst.Lst[0].String())
+		fmt.Printf("DEBUG: unknown %q\n", lst.Lst[0].String(0))
 		return nil // TODO: err?
 	}
 
@@ -157,7 +157,7 @@ func (env *environment) evalProcLambda(lst *p.ExprList) p.Expression {
 	lambda, isLambda := pr.(*p.Lambda)
 
 	if !isProc && !isLambda {
-		fmt.Printf("DEBUG: %q not a procedure\n", pr.String())
+		fmt.Printf("DEBUG: %q not a procedure\n", pr.String(0))
 		return nil // TODO:
 	}
 
@@ -338,14 +338,14 @@ func procComp(args *p.ExprList, comp func(*p.Number, *p.Number) bool) p.Expressi
 
 	lastNum, isNum := args.Lst[0].(*p.Number)
 	if !isNum {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String())
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String(0))
 		return nil // TODO:
 	}
 
 	for _, ex := range args.Lst[1:] {
 		num, isNum := ex.(*p.Number)
 		if !isNum {
-			fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String())
+			fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String(0))
 			return nil // TODO:
 		}
 
@@ -459,13 +459,13 @@ func procRemainder(args *p.ExprList) p.Expression {
 
 	num, isNum := args.Lst[0].(*p.Number)
 	if !isNum {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String())
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String(0))
 		return nil // TODO:
 	}
 
 	div, isNumDiv := args.Lst[1].(*p.Number)
 	if !isNumDiv {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[1].String())
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[1].String(0))
 		return nil // TODO:
 	}
 
@@ -480,13 +480,13 @@ func procQuotient(args *p.ExprList) p.Expression {
 
 	num, isNum := args.Lst[0].(*p.Number)
 	if !isNum {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String())
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String(0))
 		return nil // TODO:
 	}
 
 	div, isNumDiv := args.Lst[1].(*p.Number)
 	if !isNumDiv {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[1].String())
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[1].String(0))
 		return nil // TODO:
 	}
 
@@ -501,13 +501,13 @@ func procExpt(args *p.ExprList) p.Expression {
 
 	num, isNum := args.Lst[0].(*p.Number)
 	if !isNum {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String())
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String(0))
 		return nil // TODO:
 	}
 
 	exp, isExpDiv := args.Lst[1].(*p.Number)
 	if !isExpDiv {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[1].String())
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[1].String(0))
 		return nil // TODO:
 	}
 
@@ -549,7 +549,7 @@ func procCar(args *p.ExprList) p.Expression {
 		return lstArg.Lst[0]
 	}
 
-	fmt.Printf("DEBUG: Contract vialotion, expected pair?, got %q\n", arg.String())
+	fmt.Printf("DEBUG: Contract vialotion, expected pair?, got %q\n", arg.String(0))
 	return nil
 }
 
@@ -568,7 +568,7 @@ func procCdr(args *p.ExprList) p.Expression {
 		return &p.ExprList{Lst: pairArg.Lst[1:], Qlevel: pairArg.Qlevel}
 	}
 
-	fmt.Printf("DEBUG: Contract vialotion, expected pair?, got %q\n", arg.String())
+	fmt.Printf("DEBUG: Contract vialotion, expected pair?, got %q\n", arg.String(0))
 	return nil
 }
 
@@ -623,7 +623,7 @@ func minMax(args *p.ExprList) (min *p.Number, max *p.Number) {
 	max, isNum := args.Lst[0].(*p.Number)
 	min, _ = args.Lst[0].(*p.Number)
 	if !isNum {
-		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String())
+		fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", args.Lst[0].String(0))
 		return nil, nil // TODO:
 	}
 
@@ -636,7 +636,7 @@ func minMax(args *p.ExprList) (min *p.Number, max *p.Number) {
 				min = curr
 			}
 		} else {
-			fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", expr.String())
+			fmt.Printf("DEBUG: Contract vialotion, expected number?, got %q\n", expr.String(0))
 			return nil, nil // TODO:
 		}
 	}
@@ -743,7 +743,7 @@ func (i *interpreter) Interpret(input string) Status {
 		}
 
 		if res != nil {
-			println(res.String())
+			println(res.String(0))
 		}
 	}
 
