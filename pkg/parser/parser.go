@@ -145,7 +145,7 @@ type SpecialExpr struct {
 func (s *SpecialExpr) String(_ int) string {
 	switch s.typ {
 	case SpecialExit:
-		return "(exit)"
+		return "#<exit>"
 	case SpecialCloseBracket:
 		return "Unexpected `)`"
 	}
