@@ -137,7 +137,9 @@ func (env *environment) eval(expr p.Expression) (ex p.Expression, err *p.Error) 
 				return env.evalIf(ex)
 			case "load":
 				return env.evalLoad(ex)
-				// TODO: lambda, cond, apply, map, quote, begin, .. ?
+			case "cond":
+				return env.evalCond(ex)
+				// TODO: lambda, apply, map, quote, begin, .. ?
 			}
 		}
 
@@ -616,21 +618,21 @@ func procCar(args *p.ExprList) (ex p.Expression, err *p.Error) {
 }
 
 func procCdr(args *p.ExprList) (ex p.Expression, err *p.Error) {
-	len := len(args.Lst)
-	if len != 1 {
-		return &p.VoidExpr, newError(ErrArityMismatch, "cdr", "1", strconv.Itoa(len))
+	argsLen := len(args.Lst)
+	if argsLen != 1 {
+		return &p.VoidExpr, newError(ErrArityMismatch, "cdr", "1", strconv.Itoa(argsLen))
 	}
 
 	arg := args.Lst[0]
 	if pairArg, isPair := isPair(arg); isPair {
-		if len == 2 {
+		if len(pairArg.Lst) == 2 {
 			return pairArg.Lst[1], nil
 		}
 
 		return &p.ExprList{Lst: pairArg.Lst[1:], Qlevel: pairArg.Qlevel}, nil
 	}
 
-	return &p.VoidExpr, newError(ErrContractViolation, "car", "pair?", arg.String(0))
+	return &p.VoidExpr, newError(ErrContractViolation, "cdr", "pair?", arg.String(0))
 }
 
 func isPair(arg p.Expression) (pair *p.ExprList, isPair bool) {
@@ -719,6 +721,49 @@ func procMin(args *p.ExprList) (ex p.Expression, err *p.Error) {
 	}
 
 	return min, nil
+}
+
+func (env *environment) evalCond(lst *p.ExprList) (ex p.Expression, err *p.Error) {
+	for _, ex := range lst.Lst[1:len(lst.Lst)] {
+		clause, isPair := isPair(ex)
+		if !isPair {
+			return &p.VoidExpr, newError(ErrBadSyntax, "cond", "pair? as a test clause", ex.String(0))
+		}
+
+		testClause := clause.Lst[0]
+		resClauses := clause.Lst[1:len(clause.Lst)]
+		isClauseTrue := false
+
+		if varTest, isVar := testClause.(*p.Variable); isVar {
+			if varTest.Val == "else" {
+				isClauseTrue = true
+			}
+		}
+
+		if !isClauseTrue {
+			clRes, err := env.eval(testClause)
+			if err != nil {
+				return &p.VoidExpr, err
+			}
+
+			if !p.IsFalseSym(clRes) {
+				isClauseTrue = true
+			}
+		}
+
+		if isClauseTrue {
+			var res p.Expression = &p.VoidExpr
+			for _, ex := range resClauses {
+				res, err = env.eval(ex)
+				if err != nil {
+					return &p.VoidExpr, err
+				}
+			}
+			return res, nil
+		}
+	}
+
+	return &p.VoidExpr, nil
 }
 
 type interpreter struct {
