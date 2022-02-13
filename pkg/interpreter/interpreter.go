@@ -63,14 +63,10 @@ func newError(typ ErrorType, args ...string) (err *p.Error) {
 			err.Val = fmt.Sprintf("%s\n %s", err.Val, args[0])
 		}
 
-		if len >= 2 {
-			err.Val = fmt.Sprintf("%s\n  %s", err.Val, args[1])
-		}
-
 	case ErrNotAProc:
 		err.Val = "application: not a procedure;\n expected a procedure that can be applied to arguments"
 		if len >= 1 {
-			err.Val = fmt.Sprintf("%s\n  given: %s", args[0])
+			err.Val = fmt.Sprintf("%s\n  given: %s", err.Val, args[0])
 		}
 
 	case ErrArityMismatch:
@@ -201,7 +197,7 @@ func (env *environment) evalLoad(lst *p.ExprList) (ex p.Expression, err *p.Error
 	if fileName, isVar := arg.(*p.Variable); isVar {
 		input, ioerr := ioutil.ReadFile(fileName.Val)
 		if ioerr != nil {
-			return &p.VoidExpr, newError(ErrCouldntLoadFile, fileName.Val, ioerr.Error())
+			return &p.VoidExpr, newError(ErrCouldntLoadFile, ioerr.Error())
 		}
 
 		par := p.Parse(string(input))
@@ -310,6 +306,9 @@ func (env *environment) evalDefine(lst *p.ExprList) (ex p.Expression, err *p.Err
 	case *p.Variable: // Variable definition
 		ident = firstArg.Val
 		ex, err = env.eval(lst.Lst[2])
+		if err != nil {
+			return &p.VoidExpr, err
+		}
 
 	default:
 		return &p.VoidExpr, newError(ErrBadSyntax, "define", "identifier or list", lst.Lst[1].String(0))
