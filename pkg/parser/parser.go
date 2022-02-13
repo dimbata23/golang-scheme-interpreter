@@ -91,7 +91,11 @@ type Lambda struct {
 }
 
 func (lambda *Lambda) String(_ int) string {
-	return fmt.Sprintf("#<lambda %s>", lambda.Name)
+	if len(lambda.Name) != 0 {
+		return fmt.Sprintf("#<lambda %s>", lambda.Name)
+	}
+
+	return "#<lambda>"
 }
 
 type Symbol struct {

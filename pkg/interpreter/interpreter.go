@@ -139,7 +139,8 @@ func (env *environment) eval(expr p.Expression) (ex p.Expression, err *p.Error) 
 				return env.evalLoad(ex)
 			case "cond":
 				return env.evalCond(ex)
-				// TODO: lambda, apply, map, quote, begin, .. ?
+			case "lambda":
+				return env.evalLambda(ex)
 			}
 		}
 
@@ -764,6 +765,23 @@ func (env *environment) evalCond(lst *p.ExprList) (ex p.Expression, err *p.Error
 	}
 
 	return &p.VoidExpr, nil
+}
+
+func (env *environment) evalLambda(lst *p.ExprList) (ex p.Expression, err *p.Error) {
+	lstLen := len(lst.Lst)
+	if lstLen < 3 {
+		return &p.VoidExpr, newError(ErrBadSyntax, "lambda", "at least 2 arguments", strconv.Itoa(lstLen-1))
+	}
+
+	params, isLst := lst.Lst[1].(*p.ExprList)
+	if !isLst {
+		return &p.VoidExpr, newError(ErrBadSyntax, "lambda", "a list of parameters", lst.Lst[0].String(0))
+	}
+
+	res := &p.Lambda{Params: params, Body: &p.ExprList{}}
+	res.Body.Lst = lst.Lst[2:lstLen]
+
+	return res, nil
 }
 
 type interpreter struct {
