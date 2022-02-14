@@ -10,7 +10,7 @@ import (
 func main() {
 	str, err := ioutil.ReadFile("test/testfile.scm")
 	if err == nil {
-		p := parser.Parse(string(str))
+		p := parser.NewParser(string(str))
 		fmt.Println("Parsing...")
 		for {
 			expr, err := p.Next()

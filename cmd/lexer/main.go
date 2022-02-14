@@ -10,7 +10,7 @@ import (
 func main() {
 	str, err := ioutil.ReadFile("test/testfile.scm")
 	if err == nil {
-		l := lexer.Lex(string(str))
+		l := lexer.NewLexer(string(str))
 		fmt.Println("Lexing...")
 		for {
 			token := l.NextToken()
